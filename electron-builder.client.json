@@ -27,7 +27,7 @@
   },
   "afterPack": "electron/afterPack.js",
   "mac": {
-    "icon": "src/assets/icons/glyph-mark.png",
+    "icon": "src/assets/icons/glyph-linux.png",
     "target": [
       "dmg",
       "zip"
