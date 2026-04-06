@@ -35,7 +35,10 @@ jobs:
           Copy-Item $mpvPath "vendor\mpv\mpv.exe" -Force
           Write-Host "Bundled mpv from: $mpvPath"
       - name: Build Windows Client + Server
-        run: npm run pack:all:win
+        run: |
+          npm run build:client
+          npx electron-builder --config electron-builder.client.json --win nsis --publish never
+          npx electron-builder --config electron-builder.server.json --win nsis --publish never
       - name: Upload Client Artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -62,9 +65,9 @@ jobs:
       - name: Build client frontend
         run: npm run build:client
       - name: Build Linux Client AppImage
-        run: npx electron-builder --config electron-builder.client.json --linux AppImage
+        run: npx electron-builder --config electron-builder.client.json --linux AppImage --publish never
       - name: Build Linux Server AppImage
-        run: npx electron-builder --config electron-builder.server.json --linux AppImage
+        run: npx electron-builder --config electron-builder.server.json --linux AppImage --publish never
       - name: Upload Client Artifacts
         uses: actions/upload-artifact@v4
         with:
