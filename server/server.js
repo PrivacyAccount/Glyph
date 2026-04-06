@@ -221,6 +221,10 @@ console.log(`[GlyphServer] DATA_DIR=${DATA_DIR}`);
 console.log(`[GlyphServer] DATA_DIR_SOURCE=${DATA_DIR_INFO.source}`);
 console.log(`[GlyphServer] ffmpeg=${ffmpegPath}`);
 console.log(`[GlyphServer] ffprobe=${ffprobePath}`);
+addRuntimeLog('info', 'server', 'Media tools resolved', {
+    ffmpegPath,
+    ffprobePath,
+});
 
 function saveDataDirConfig(nextDataDir) {
     const rootDir = path.dirname(DATA_DIR_CONFIG_PATH);
@@ -4060,7 +4064,7 @@ function getVideoDurationSeconds(videoPath) {
                 '-of', 'default=noprint_wrappers=1:nokey=1',
                 videoPath,
             ];
-            execFile('ffprobe', args, (probeErr, stdout) => {
+            execFile(ffprobePath, args, (probeErr, stdout) => {
                 if (probeErr) return resolve(0);
                 const parsed = Number(String(stdout || '').trim());
                 resolve(Number.isFinite(parsed) && parsed > 0 ? parsed : 0);
@@ -4113,7 +4117,7 @@ function runThumbFfmpeg(videoPath, thumbPath, seekSeconds, inputSeek) {
             thumbPath,
         ];
 
-        const child = execFile('ffmpeg', args, { timeout: 25000 }, (err, _stdout, stderr) => {
+        const child = execFile(ffmpegPath, args, { timeout: 25000 }, (err, _stdout, stderr) => {
             const stderrText = String(stderr || '').trim();
             if (err) {
                 finishFfmpegJob(jobId, 'error', err?.message || 'thumb ffmpeg failed');
@@ -11452,8 +11456,6 @@ const startServer = () => {
 startServer();
 
 module.exports = app;
-
-
 
 
 
