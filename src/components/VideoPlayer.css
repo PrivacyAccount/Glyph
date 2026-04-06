@@ -1,0 +1,15 @@
+﻿/* VideoPlayer.css - Basic styles, replaced by mpv OSC */
+
+.video-player-container {
+    width: 100%;
+    height: 100%;
+    background: #000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.video-loading {
+    color: white;
+    font-size: 1.2rem;
+}

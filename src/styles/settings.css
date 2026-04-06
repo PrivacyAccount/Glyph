@@ -1,0 +1,43 @@
+﻿/* Extracted settings UI blocks from index.css */
+
+.settings-playback-preview {
+  margin-top: 16px;
+}
+
+.settings-playback-preview-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.settings-playback-preview-stage {
+  height: 120px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  background: linear-gradient(180deg, color-mix(in oklab, var(--bg-card) 84%, black 16%), color-mix(in oklab, var(--bg-card) 70%, black 30%));
+  position: relative;
+  overflow: hidden;
+}
+
+.settings-playback-preview-cue {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  line-height: 1.2;
+}
+
+:root[data-theme-mode="modern"] .settings-playback-preview-stage {
+  border: 1px solid rgba(153, 166, 184, 0.58) !important;
+  background: linear-gradient(180deg, rgba(255,255,255,0.36), rgba(255,255,255,0.2));
+}
+
+
+.settings-playback-range::-webkit-slider-thumb {
+  background-clip: padding-box;
+}

@@ -1,0 +1,264 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Glyph Loading...</title>
+    <script>
+        (() => {
+            const applyTheme = (mode, palette) => {
+                const normalizedMode = mode === 'modern' ? 'modern' : 'default';
+                const normalizedPalette = ['silver', 'starlight', 'sky', 'lavender', 'copper'].includes(palette) ? palette : 'silver';
+                document.documentElement.setAttribute('data-theme', normalizedMode);
+                document.documentElement.setAttribute('data-palette', normalizedPalette);
+            };
+
+            try {
+                const params = new URLSearchParams(window.location.search);
+                applyTheme(params.get('theme') === 'modern' ? 'modern' : 'default', params.get('palette') || 'silver');
+            } catch {
+                applyTheme('default', 'silver');
+            }
+        })();
+    </script>
+    <style>
+        :root {
+            --splash-bg: #101018;
+            --splash-icon: #f1f2f6;
+            --splash-noise-opacity: 0;
+            --splash-tint-a: rgba(88, 95, 120, 0.22);
+            --splash-tint-b: rgba(36, 40, 57, 0.28);
+        }
+
+        :root[data-theme="modern"] {
+            --splash-icon: #2b3e57;
+            --splash-noise-opacity: 0.22;
+        }
+
+        :root[data-theme="modern"][data-palette="silver"] {
+            --splash-bg: #edf2f8;
+            --splash-tint-a: rgba(233, 240, 249, 0.9);
+            --splash-tint-b: rgba(210, 220, 234, 0.84);
+        }
+
+        :root[data-theme="modern"][data-palette="starlight"] {
+            --splash-bg: #eef4de;
+            --splash-tint-a: rgba(242, 247, 227, 0.9);
+            --splash-tint-b: rgba(222, 232, 196, 0.84);
+        }
+
+        :root[data-theme="modern"][data-palette="sky"] {
+            --splash-bg: #e7f0fb;
+            --splash-tint-a: rgba(240, 247, 255, 0.9);
+            --splash-tint-b: rgba(212, 226, 246, 0.84);
+        }
+
+        :root[data-theme="modern"][data-palette="lavender"] {
+            --splash-bg: #efe9f7;
+            --splash-tint-a: rgba(246, 241, 252, 0.9);
+            --splash-tint-b: rgba(224, 214, 240, 0.84);
+        }
+
+        :root[data-theme="modern"][data-palette="copper"] {
+            --splash-bg: #f5e8de;
+            --splash-tint-a: rgba(253, 244, 236, 0.9);
+            --splash-tint-b: rgba(239, 219, 203, 0.84);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background: var(--splash-bg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+            user-select: none;
+            -webkit-app-region: drag;
+            position: relative;
+            isolation: isolate;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: -2;
+            background:
+                radial-gradient(980px 580px at 8% -10%, var(--splash-tint-a), transparent 64%),
+                radial-gradient(860px 560px at 95% 0%, var(--splash-tint-b), transparent 66%),
+                linear-gradient(180deg, var(--splash-bg), color-mix(in srgb, var(--splash-bg) 89%, #cfd9e6));
+        }
+
+        :root[data-theme="modern"] body::after {
+            content: '';
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: -1;
+            opacity: var(--splash-noise-opacity);
+            background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 140 140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.88' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/><feComponentTransfer><feFuncA type='table' tableValues='0 0.23'/></feComponentTransfer></filter><rect width='140' height='140' filter='url(%23n)'/></svg>");
+            background-size: 170px 170px;
+            background-repeat: repeat;
+            mix-blend-mode: soft-light;
+        }
+
+        .splash-shell {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .icon-wrap {
+            position: relative;
+            width: 104px;
+            height: 104px;
+            color: var(--splash-icon);
+            filter: drop-shadow(0 10px 24px color-mix(in srgb, var(--splash-icon) 28%, transparent));
+            animation: iconFloat 2.2s ease-in-out infinite;
+        }
+
+        .icon-base,
+        .icon-fill {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        .icon-base path {
+            fill: currentColor;
+            opacity: 0.18;
+            animation: iconPulse 1.7s ease-in-out infinite;
+        }
+
+        .icon-fill path {
+            fill: currentColor;
+            opacity: 0;
+            transform-origin: 50% 50%;
+            animation: glyphFillTravel 2.15s cubic-bezier(0.4, 0.05, 0.2, 0.95) infinite;
+        }
+
+        .icon-fill path:nth-child(2) {
+            animation-delay: 0.13s;
+        }
+
+        .icon-fill path:nth-child(3) {
+            animation-delay: 0.26s;
+        }
+
+        .icon-fill path:nth-child(4) {
+            animation-delay: 0.39s;
+        }
+
+        .status {
+            min-height: 20px;
+            font-family: 'Inter', 'Inter Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            font-size: 14px;
+            font-weight: 500;
+            color: color-mix(in srgb, var(--splash-icon) 72%, #ffffff 28%);
+            letter-spacing: 0.15px;
+            opacity: 0.94;
+            transition: opacity 0.12s ease;
+        }
+
+        @keyframes glyphFillTravel {
+            0% {
+                opacity: 0;
+                transform: scale(0.92);
+            }
+
+            12% {
+                opacity: 0.98;
+                transform: scale(1);
+            }
+
+            56% {
+                opacity: 0.98;
+                transform: scale(1);
+            }
+
+            100% {
+                opacity: 0;
+                transform: scale(1.02);
+            }
+        }
+
+        @keyframes iconFloat {
+
+            0%,
+            100% {
+                transform: translateY(0);
+            }
+
+            50% {
+                transform: translateY(-2px);
+            }
+        }
+
+        @keyframes iconPulse {
+
+            0%,
+            100% {
+                opacity: 0.16;
+            }
+
+            50% {
+                opacity: 0.3;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="splash-shell">
+        <div class="icon-wrap" aria-hidden="true">
+            <svg class="icon-base" viewBox="0 0 24 24" fill="none">
+                <path d="M12,20.3c-.11,0-.22-.04-.31-.11-.22-.17-.25-.49-.08-.7l5.03-6.37c.07-.09.07-.22,0-.31l-3.82-4.85c-.17-.22-.13-.53.08-.7.22-.17.53-.13.7.08l3.82,4.85c.36.45.36,1.09,0,1.54l-5.03,6.37c-.1.12-.25.19-.39.19Z" />
+                <path d="M13.67,18.82l-.52.67c.03.1.04.2.04.31,0,.65-.53,1.18-1.18,1.18s-1.19-.53-1.19-1.18.53-1.19,1.19-1.19h.04l.52-.66c-.18-.06-.36-.09-.56-.09-1.07,0-1.94.87-1.94,1.94s.87,1.93,1.94,1.93,1.93-.87,1.93-1.93c0-.36-.1-.69-.27-.98Z" />
+                <path d="M12,3.33c.11,0,.22.04.31.11.22.17.25.49.08.7l-5.03,6.37c-.07.09-.07.22,0,.31l3.82,4.85c.17.22.13.53-.08.7-.22.17-.53.13-.7-.08l-3.82-4.85c-.36-.45-.36-1.09,0-1.54l5.03-6.37c.1-.12.25-.19.39-.19Z" />
+                <path d="M10.33,4.8l.52-.67c-.03-.1-.04-.2-.04-.31,0-.65.53-1.18,1.18-1.18s1.19.53,1.19,1.18-.53,1.19-1.19,1.19h-.04l-.52.66c.18.06.36.09.56.09,1.07,0,1.94-.87,1.94-1.94s-.87-1.93-1.94-1.93-1.93.87-1.93,1.93c0,.36.1.69.27.98Z" />
+            </svg>
+            <svg class="icon-fill" viewBox="0 0 24 24" fill="none">
+                <path d="M12,20.3c-.11,0-.22-.04-.31-.11-.22-.17-.25-.49-.08-.7l5.03-6.37c.07-.09.07-.22,0-.31l-3.82-4.85c-.17-.22-.13-.53.08-.7.22-.17.53-.13.7.08l3.82,4.85c.36.45.36,1.09,0,1.54l-5.03,6.37c-.1.12-.25.19-.39.19Z" />
+                <path d="M13.67,18.82l-.52.67c.03.1.04.2.04.31,0,.65-.53,1.18-1.18,1.18s-1.19-.53-1.19-1.18.53-1.19,1.19-1.19h.04l.52-.66c-.18-.06-.36-.09-.56-.09-1.07,0-1.94.87-1.94,1.94s.87,1.93,1.94,1.93,1.93-.87,1.93-1.93c0-.36-.1-.69-.27-.98Z" />
+                <path d="M12,3.33c.11,0,.22.04.31.11.22.17.25.49.08.7l-5.03,6.37c-.07.09-.07.22,0,.31l3.82,4.85c.17.22.13.53-.08.7-.22.17-.53.13-.7-.08l-3.82-4.85c-.36-.45-.36-1.09,0-1.54l5.03-6.37c.1-.12.25-.19.39-.19Z" />
+                <path d="M10.33,4.8l.52-.67c-.03-.1-.04-.2-.04-.31,0-.65.53-1.18,1.18-1.18s1.19.53,1.19,1.18-.53,1.19-1.19,1.19h-.04l-.52.66c.18.06.36.09.56.09,1.07,0,1.94-.87,1.94-1.94s-.87-1.93-1.94-1.93-1.93.87-1.93,1.93c0,.36.1.69.27.98Z" />
+            </svg>
+        </div>
+        <div id="status" class="status">Initialisiere...</div>
+    </div>
+
+    <script>
+        const { ipcRenderer } = require('electron');
+        const statusEl = document.getElementById('status');
+        const params = new URLSearchParams(window.location.search || '');
+        const initialStatus = params.get('status');
+        const initialLang = params.get('lang');
+        if (initialLang) {
+            try { document.documentElement.lang = initialLang; } catch { }
+        }
+        if (statusEl && initialStatus) {
+            statusEl.innerText = initialStatus;
+        }
+
+        ipcRenderer.on('update-status', (_event, message) => {
+            if (!statusEl) return;
+            statusEl.style.opacity = '0';
+            setTimeout(() => {
+                statusEl.innerText = message;
+                statusEl.style.opacity = '0.94';
+            }, 100);
+        });
+    </script>
+</body>
+
+</html>

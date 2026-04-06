@@ -1,0 +1,27 @@
+Glyph Proprietary License
+Copyright (c) 2026 Looney. All rights reserved.
+
+This software and all related files, assets, branding, and documentation
+("Software") are proprietary and confidential.
+
+You are granted a limited, non-exclusive, non-transferable, revocable license
+to install and use the Software for personal or internal use only.
+
+You may NOT, without prior written permission from Looney:
+1. Copy, redistribute, resell, sublicense, rent, lease, or share the Software.
+2. Modify, adapt, reverse engineer, decompile, disassemble, or create
+   derivative works for redistribution.
+3. Remove, alter, or obscure copyright, branding, or attribution notices.
+4. Rebrand, rename, or publish modified/unmodified versions as your own.
+5. Mirror or host installer files, binaries, or packaged releases on third-party
+   platforms.
+
+The Software is provided "AS IS", without warranty of any kind, express or
+implied, including but not limited to merchantability, fitness for a particular
+purpose, and noninfringement. In no event shall the author be liable for any
+claim, damages, or other liability arising from or related to the Software.
+
+All rights not expressly granted are reserved by Looney.
+
+Contact for licensing permissions:
+https://www.patreon.com/c/LooneyScripts

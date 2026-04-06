@@ -1,0 +1,62 @@
+name: Build Installers
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Use Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install
+        run: npm ci
+      - name: Build Windows Client + Server
+        run: npm run pack:all:win
+      - name: Upload Client Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: glyph-client-windows
+          path: dist-client/**
+      - name: Upload Server Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: glyph-server-windows
+          path: dist-server/**
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Use Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install
+        run: npm ci
+      - name: Build client frontend
+        run: npm run build:client
+      - name: Build Linux Client AppImage
+        run: npx electron-builder --config electron-builder.client.json --linux AppImage
+      - name: Build Linux Server AppImage
+        run: npx electron-builder --config electron-builder.server.json --linux AppImage
+      - name: Upload Client Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: glyph-client-linux
+          path: dist-client/**
+      - name: Upload Server Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: glyph-server-linux
+          path: dist-server/**

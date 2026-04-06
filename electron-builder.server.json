@@ -1,0 +1,47 @@
+{
+  "appId": "com.glyph.server",
+  "productName": "Glyph Server",
+  "directories": {
+    "output": "dist-server"
+  },
+  "files": [
+    "electron/server-main.js",
+    "server/**/*",
+    "!server/data/**",
+    "src/assets/icons/glyph.ico",
+    "package.json"
+  ],
+  "extraMetadata": {
+    "main": "electron/server-main.js"
+  },
+  "afterPack": "electron/afterPack.js",
+  "mac": {
+    "icon": "src/assets/icons/glyph-mark.png",
+    "target": [
+      "dmg",
+      "zip"
+    ],
+    "category": "public.app-category.utilities"
+  },
+  "win": {
+    "signAndEditExecutable": false,
+    "icon": "src/assets/icons/glyph.ico",
+    "target": [
+      "nsis"
+    ]
+  },
+  "linux": {
+    "icon": "src/assets/icons/glyph-linux.png",
+    "target": [
+      "AppImage"
+    ],
+    "category": "Utility"
+  },
+  "nsis": {
+    "oneClick": false,
+    "perMachine": false,
+    "allowToChangeInstallationDirectory": true,
+    "license": "EULA.txt",
+    "include": "build/uninstall-cleanup.nsh"
+  }
+}

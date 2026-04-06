@@ -1,0 +1,22 @@
+node_modules/
+dist/
+dist-client/
+dist-server/
+tmp_asar_client/
+tmp_asar_server/
+
+# Runtime data and caches
+server/data/
+server/*.log
+*.log
+
+# Android build caches/artifacts
+glyph-tv-android/.gradle/
+glyph-tv-android/build/
+glyph-tv-android/app/build/
+glyph-tv-android/local.properties
+glyph-tv-android/build-kotlin.log
+
+# OS/editor noise
+.DS_Store
+Thumbs.db

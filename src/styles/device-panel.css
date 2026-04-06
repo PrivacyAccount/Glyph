@@ -1,0 +1,954 @@
+/* ── Device Panel (slide-out drawer from right) ──────────────────────── */
+
+.device-panel-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 900;
+    background: rgba(0, 0, 0, 0.35);
+    backdrop-filter: blur(2px);
+    opacity: 0;
+    transition: opacity 0.25s ease;
+    pointer-events: none;
+}
+
+.device-panel-backdrop.open {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.device-panel {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 400px;
+    max-width: 92vw;
+    z-index: 910;
+    display: flex;
+    flex-direction: column;
+    transform: translateX(100%);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+    /* Glassmorphism – matching app theme */
+    background: var(--bg-card, rgba(30, 30, 40, 0.92));
+    border-left: 1px solid var(--border-accent, rgba(168, 85, 247, 0.3));
+    box-shadow: -8px 0 32px rgba(0, 0, 0, 0.45), 0 0 24px var(--shadow-glow, rgba(168, 85, 247, 0.12));
+    backdrop-filter: blur(24px) saturate(1.3);
+    -webkit-backdrop-filter: blur(24px) saturate(1.3);
+}
+
+.device-panel.open {
+    transform: translateX(0);
+}
+
+/* ── Panel header ──────────────────────────────────────────────────── */
+
+.device-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 20px 14px;
+    border-bottom: none;
+    -webkit-app-region: no-drag;
+}
+
+.device-panel-header h2 {
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--text-primary, #f0f0f5);
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.device-panel-header h2 svg {
+    width: 20px;
+    height: 20px;
+    color: var(--accent-primary, #a855f7);
+}
+
+.device-panel-close {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 6px;
+    border-radius: 6px;
+    color: var(--text-secondary, #888);
+    transition: background 0.15s, color 0.15s;
+}
+
+.device-panel-close:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-primary, #f0f0f5);
+}
+
+.device-panel-close svg {
+    width: 18px;
+    height: 18px;
+}
+
+/* ── Tab bar ───────────────────────────────────────────────────────── */
+
+.device-tab-bar {
+    display: flex;
+    padding: 0 20px;
+    gap: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.device-tab-btn {
+    flex: 1;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 12px 8px 10px;
+    font-size: 0.82rem;
+    font-weight: 500;
+    color: var(--text-secondary, #888);
+    border-bottom: 2px solid transparent;
+    transition: color 0.2s, border-color 0.2s;
+    white-space: nowrap;
+}
+
+.device-tab-btn:hover {
+    color: var(--text-primary, #f0f0f5);
+}
+
+.device-tab-btn.active {
+    color: var(--accent-primary, #a855f7);
+    border-bottom-color: var(--accent-primary, #a855f7);
+}
+
+.device-tab-btn.disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+/* ── Tab content ───────────────────────────────────────────────────── */
+
+.device-tab-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+}
+
+/* ── TheHandy tab ──────────────────────────────────────────────────── */
+
+.handy-section {
+    margin-bottom: 24px;
+}
+
+.handy-section-title {
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-secondary, #888);
+    margin: 0 0 10px;
+}
+
+/* Connection key input group */
+.handy-key-group {
+    display: flex;
+    gap: 8px;
+}
+
+.handy-key-input {
+    flex: 1;
+    background: rgba(128, 128, 128, 0.08) !important;
+    border: 1.5px solid rgba(128, 128, 128, 0.35) !important;
+    border-radius: var(--radius-sm, 10px) !important;
+    padding: 10px 12px !important;
+    color: var(--text-primary, #f0f0f5) !important;
+    font-size: 0.88rem !important;
+    font-family: 'Consolas', 'Courier New', monospace !important;
+    letter-spacing: 0.04em;
+    outline: none;
+    transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.06) !important;
+}
+
+.handy-key-input::placeholder {
+    color: rgba(128, 128, 128, 0.5);
+    font-family: inherit;
+}
+
+.handy-key-input:focus {
+    border-color: var(--accent-primary, #a855f7) !important;
+    box-shadow: 0 0 0 2px rgba(168, 85, 247, 0.15), inset 0 1px 2px rgba(0, 0, 0, 0.06) !important;
+}
+
+.handy-connect-btn {
+    padding: 10px 18px;
+    border-radius: var(--radius-sm, 10px) !important;
+    border: none;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.1s;
+    white-space: nowrap;
+}
+
+.handy-connect-btn:active {
+    transform: scale(0.97);
+}
+
+.handy-connect-btn.connect {
+    background: var(--accent-gradient, linear-gradient(135deg, #a855f7, #6366f1));
+    color: #fff;
+}
+
+.handy-connect-btn.connect:hover {
+    filter: brightness(1.1);
+}
+
+.handy-connect-btn.disconnect {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+    border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+.handy-connect-btn.disconnect:hover {
+    background: rgba(239, 68, 68, 0.25);
+}
+
+.handy-connect-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.bp-scan-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: 32px;
+    padding: 0 12px;
+    border-radius: var(--radius-sm, 10px);
+    border: 1px solid transparent;
+    background: var(--accent-gradient, linear-gradient(135deg, #a855f7, #6366f1));
+    color: #fff;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: filter .15s ease, transform .08s ease, box-shadow .15s ease;
+    box-shadow: var(--shadow-sm);
+}
+
+.bp-scan-btn:hover {
+    filter: brightness(1.08);
+    box-shadow: var(--shadow-md);
+}
+
+.bp-scan-btn:active {
+    transform: translateY(1px);
+}
+
+/* Status card */
+.handy-status-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.handy-status-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.handy-status-dot.connected {
+    background: #22c55e;
+    box-shadow: 0 0 8px rgba(34, 197, 94, 0.5);
+    animation: pulse-dot 2s ease-in-out infinite;
+}
+
+.handy-status-dot.disconnected {
+    background: #6b7280;
+}
+
+.handy-status-dot.connecting {
+    background: #f59e0b;
+    animation: pulse-dot 1s ease-in-out infinite;
+}
+
+.handy-status-dot.error {
+    background: #ef4444;
+    box-shadow: 0 0 8px rgba(239, 68, 68, 0.4);
+}
+
+@keyframes pulse-dot {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.4;
+    }
+}
+
+.handy-status-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.handy-status-label {
+    font-size: 0.88rem;
+    font-weight: 500;
+    color: var(--text-primary, #f0f0f5);
+}
+
+.handy-status-detail {
+    font-size: 0.75rem;
+    color: var(--text-secondary, #888);
+    margin-top: 2px;
+}
+
+.bp-device-controls {
+    margin-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.bp-device-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.bp-device-label {
+    min-width: 46px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--text-secondary, #888);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.bp-test-buttons {
+    display: flex;
+    gap: 6px;
+}
+
+.bp-test-btn {
+    border: 1px solid color-mix(in srgb, var(--accent-color, #4e8dbf) 34%, transparent);
+    background: color-mix(in srgb, var(--accent-color, #4e8dbf) 16%, transparent);
+    color: var(--text-primary, #f0f0f5);
+    border-radius: var(--radius-sm, 10px);
+    height: 28px;
+    padding: 0 10px;
+    font-size: 0.76rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.bp-test-btn:hover {
+    background: color-mix(in srgb, var(--accent-color, #4e8dbf) 26%, transparent);
+}
+
+.bp-test-btn.stop {
+    border-color: rgba(239, 68, 68, 0.4);
+    background: rgba(239, 68, 68, 0.12);
+    color: #ef4444;
+}
+
+.bp-range-row {
+    gap: 6px;
+}
+
+.bp-slider-block {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.bp-slider-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.bp-slider-values {
+    font-size: 0.76rem;
+    font-weight: 600;
+    color: var(--accent-primary, #a855f7);
+    font-variant-numeric: tabular-nums;
+}
+
+.bp-monitor-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.bp-monitor-row {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--radius-sm, 10px);
+    background: rgba(255, 255, 255, 0.04);
+    padding: 8px 10px;
+}
+
+.bp-monitor-name {
+    font-size: 0.84rem;
+    font-weight: 600;
+    color: var(--text-primary, #f0f0f5);
+}
+
+.bp-monitor-meta {
+    margin-top: 2px;
+    font-size: 0.74rem;
+    color: var(--text-secondary, #888);
+}
+
+/* Offset slider */
+.handy-offset-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.handy-offset-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.handy-offset-value {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--accent-primary, #a855f7);
+    font-variant-numeric: tabular-nums;
+}
+
+.handy-offset-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 4px;
+    border-radius: 2px;
+    background: transparent;
+    outline: none;
+}
+
+.handy-offset-slider::-webkit-slider-runnable-track {
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.85);
+    border: 1px solid rgba(0, 0, 0, 0.12);
+    box-sizing: border-box;
+}
+
+.handy-offset-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--accent-primary, #a855f7);
+    cursor: pointer;
+    box-shadow: 0 0 6px rgba(168, 85, 247, 0.4);
+    transition: transform 0.1s;
+    margin-top: -6px;
+}
+
+.handy-offset-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.2);
+}
+
+.handy-offset-slider::-moz-range-track {
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.85);
+    border: 1px solid rgba(0, 0, 0, 0.12);
+    box-sizing: border-box;
+}
+
+.handy-offset-slider::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--accent-primary, #a855f7);
+    cursor: pointer;
+    box-shadow: 0 0 6px rgba(168, 85, 247, 0.4);
+    border: 0;
+}
+
+/* Dual stroke range: only thumbs are interactive, tracks do not block each other */
+.device-range-dual {
+    -webkit-appearance: none;
+    appearance: none;
+    background: transparent !important;
+    border: 0 !important;
+    outline: none !important;
+    pointer-events: none;
+}
+
+.device-range-dual::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--accent-primary, #a855f7);
+    cursor: pointer;
+    box-shadow: 0 0 6px rgba(168, 85, 247, 0.4);
+    transition: transform 0.1s;
+    margin-top: -6px;
+    pointer-events: auto;
+}
+
+.device-range-dual::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--accent-primary, #a855f7);
+    cursor: pointer;
+    box-shadow: 0 0 6px rgba(168, 85, 247, 0.4);
+    transition: transform 0.1s;
+    pointer-events: auto;
+}
+
+.device-range-dual::-webkit-slider-runnable-track {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 4px;
+    background: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+}
+
+.device-range-dual::-moz-range-track {
+    height: 4px;
+    background: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+}
+
+.device-range-dual::-webkit-slider-thumb:hover,
+.device-range-dual::-moz-range-thumb:hover {
+    transform: scale(1.2);
+}
+
+.device-debug-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.78rem;
+    color: var(--text-secondary, #888);
+    user-select: none;
+}
+
+.device-debug-toggle input {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    border-radius: 4px;
+    border: 1px solid var(--border-subtle);
+    background: color-mix(in oklab, var(--bg-tertiary) 85%, transparent);
+    cursor: pointer;
+    position: relative;
+    flex-shrink: 0;
+    transition: border-color var(--transition-fast), background var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.device-debug-toggle input:focus-visible {
+    outline: none;
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 2px color-mix(in oklab, var(--accent-primary) 22%, transparent);
+}
+
+.device-debug-toggle input:checked {
+    border-color: var(--accent-primary);
+    background: var(--accent-primary, #a855f7);
+}
+
+.device-debug-toggle input:checked::after {
+    content: '';
+    position: absolute;
+    left: 5px;
+    top: 2px;
+    width: 4px;
+    height: 8px;
+    border: solid #fff;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+}
+
+.device-debug-card {
+    margin-top: 10px;
+    padding: 12px;
+    border-radius: var(--radius-sm, 10px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.04);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.device-debug-row {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.device-debug-label {
+    font-size: 0.78rem;
+    color: var(--text-secondary, #9ca3af);
+}
+
+.device-debug-btns {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.device-debug-minmax {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.device-debug-minmax label {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 0.74rem;
+    color: var(--text-secondary, #9ca3af);
+}
+
+.device-debug-minmax input {
+    width: 100%;
+    border-radius: var(--radius-sm, 8px);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-primary, #f0f0f5);
+    padding: 7px 9px;
+    outline: none;
+}
+
+.device-debug-minmax input:focus {
+    border-color: var(--accent-primary, #a855f7);
+    box-shadow: 0 0 0 2px rgba(168, 85, 247, 0.18);
+}
+
+.device-debug-btns .handy-connect-btn {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-primary, #f0f0f5);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    padding: 8px 10px;
+}
+
+.device-debug-btns .handy-connect-btn:hover {
+    background: rgba(255, 255, 255, 0.14);
+}
+
+.device-debug-axis-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 210px;
+    overflow-y: auto;
+}
+
+.device-debug-axis-row {
+    border-radius: var(--radius-sm, 8px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.03);
+    padding: 8px;
+}
+
+.device-debug-axis-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.76rem;
+    color: var(--text-primary, #e5e7eb);
+}
+
+.device-debug-axis-top span {
+    color: var(--text-secondary, #9ca3af);
+}
+
+.device-debug-script {
+    margin-top: 4px;
+    font-size: 0.74rem;
+    color: var(--text-primary, #e5e7eb);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.device-debug-script.muted {
+    color: var(--text-secondary, #9ca3af);
+}
+
+.device-debug-axis-meta {
+    margin-top: 2px;
+    font-size: 0.72rem;
+    color: var(--text-secondary, #9ca3af);
+}
+
+.device-debug-last {
+    font-size: 0.74rem;
+    color: var(--text-secondary, #9ca3af);
+}
+
+.device-debug-live-value {
+    color: color-mix(in oklab, var(--accent-primary, #a855f7) 78%, black 22%);
+    font-weight: 700;
+}
+
+/* Sync status */
+.handy-sync-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    border-radius: 10px;
+    font-size: 0.85rem;
+    color: var(--text-primary, #f0f0f5);
+}
+
+.handy-sync-card.ready {
+    background: rgba(34, 197, 94, 0.08);
+    border: 1px solid rgba(34, 197, 94, 0.2);
+}
+
+.handy-sync-card.idle {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.handy-sync-card.uploading {
+    background: rgba(245, 158, 11, 0.08);
+    border: 1px solid rgba(245, 158, 11, 0.2);
+}
+
+.handy-sync-card svg {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+}
+
+/* ── Coming soon placeholder ───────────────────────────────────────── */
+
+.device-coming-soon {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 300px;
+    text-align: center;
+    gap: 16px;
+    opacity: 0.5;
+}
+
+.device-coming-soon svg {
+    width: 48px;
+    height: 48px;
+    color: var(--text-secondary, #888);
+}
+
+.device-coming-soon span {
+    font-size: 0.95rem;
+    color: var(--text-secondary, #888);
+}
+
+/* ── Navbar device button (pulse animation when connected) ────────── */
+
+.navbar-device-btn {
+    position: relative;
+}
+
+.navbar-device-btn .device-connected-indicator {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #22c55e;
+    box-shadow: 0 0 6px rgba(34, 197, 94, 0.6);
+    animation: pulse-dot 2s ease-in-out infinite;
+}
+
+/* ── Error message ─────────────────────────────────────────────────── */
+.handy-error {
+    padding: 10px 14px;
+    border-radius: var(--radius-sm, 8px);
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    color: #fca5a5;
+    font-size: 0.82rem;
+    line-height: 1.4;
+    word-break: break-word;
+}
+
+/* ── Modern (light) theme overrides ────────────────────────────────── */
+
+:root[data-theme-mode="modern"] .device-panel {
+    background: rgba(255, 255, 255, 0.92) !important;
+    border-left: 1px solid rgba(153, 166, 184, 0.5) !important;
+    box-shadow: -8px 0 32px rgba(0, 0, 0, 0.12) !important;
+    backdrop-filter: blur(24px) saturate(140%) !important;
+    -webkit-backdrop-filter: blur(24px) saturate(140%) !important;
+}
+
+:root[data-theme-mode="modern"] .device-panel-backdrop {
+    background: rgba(0, 0, 0, 0.18);
+}
+
+:root[data-theme-mode="modern"] .device-panel-header {
+    border-bottom-color: rgba(0, 0, 0, 0.08);
+}
+
+:root[data-theme-mode="modern"] .device-panel-header h2 {
+    color: #1d2a38;
+}
+
+:root[data-theme-mode="modern"] .device-panel-close {
+    color: #6b7a8e;
+}
+
+:root[data-theme-mode="modern"] .device-panel-close:hover {
+    background: rgba(0, 0, 0, 0.06);
+    color: #1d2a38;
+}
+
+:root[data-theme-mode="modern"] .device-tab-bar {
+    border-bottom-color: rgba(0, 0, 0, 0.08);
+}
+
+:root[data-theme-mode="modern"] .device-tab-btn {
+    color: #6b7a8e;
+}
+
+:root[data-theme-mode="modern"] .device-tab-btn:hover {
+    color: #1d2a38;
+}
+
+:root[data-theme-mode="modern"] .device-tab-btn.active {
+    color: var(--accent-primary, #4f7ea8);
+    border-bottom-color: var(--accent-primary, #4f7ea8);
+}
+
+:root[data-theme-mode="modern"] .handy-section-title {
+    color: #4f5b6a;
+}
+
+:root[data-theme-mode="modern"] .handy-key-input {
+    background: rgba(255, 255, 255, 0.7) !important;
+    border: 1.5px solid rgba(153, 166, 184, 0.55) !important;
+    border-radius: var(--radius-sm, 10px) !important;
+    color: #1d2a38 !important;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05), 0 1px 0 rgba(255, 255, 255, 0.7) !important;
+}
+
+:root[data-theme-mode="modern"] .handy-key-input::placeholder {
+    color: rgba(80, 90, 105, 0.45);
+}
+
+:root[data-theme-mode="modern"] .handy-key-input:focus {
+    border-color: var(--accent-primary, #4f7ea8) !important;
+    box-shadow: 0 0 0 2px rgba(79, 126, 168, 0.18), inset 0 1px 2px rgba(0, 0, 0, 0.05) !important;
+}
+
+:root[data-theme-mode="modern"] .handy-connect-btn {
+    border-radius: var(--radius-sm, 10px) !important;
+}
+
+:root[data-theme-mode="modern"] .handy-status-card {
+    background: rgba(255, 255, 255, 0.5);
+    border-color: rgba(153, 166, 184, 0.3);
+}
+
+:root[data-theme-mode="modern"] .handy-status-label {
+    color: #1d2a38;
+}
+
+:root[data-theme-mode="modern"] .handy-status-detail {
+    color: #4f5b6a;
+}
+
+:root[data-theme-mode="modern"] .handy-sync-card.idle {
+    background: rgba(255, 255, 255, 0.4);
+    border-color: rgba(153, 166, 184, 0.3);
+}
+
+:root[data-theme-mode="modern"] .handy-sync-card {
+    color: #1d2a38;
+}
+
+:root[data-theme-mode="modern"] .device-debug-card {
+    background: rgba(255, 255, 255, 0.52);
+    border-color: rgba(153, 166, 184, 0.35);
+}
+
+:root[data-theme-mode="modern"] .device-debug-label,
+:root[data-theme-mode="modern"] .device-debug-axis-top span,
+:root[data-theme-mode="modern"] .device-debug-script.muted,
+:root[data-theme-mode="modern"] .device-debug-axis-meta,
+:root[data-theme-mode="modern"] .device-debug-last,
+:root[data-theme-mode="modern"] .device-debug-toggle {
+    color: #5b6574;
+}
+
+:root[data-theme-mode="modern"] .device-debug-toggle input {
+    background: rgba(255, 255, 255, 0.78);
+    border: 1px solid rgba(153, 166, 184, 0.45);
+}
+
+:root[data-theme-mode="modern"] .device-debug-toggle input:checked {
+    border-color: var(--accent-primary);
+    background: var(--accent-primary, #a855f7);
+}
+
+:root[data-theme-mode="modern"] .device-debug-axis-top,
+:root[data-theme-mode="modern"] .device-debug-script {
+    color: #1d2a38;
+}
+
+:root[data-theme-mode="modern"] .device-debug-btns .handy-connect-btn {
+    background: rgba(255, 255, 255, 0.75);
+    color: #1d2a38;
+    border-color: rgba(153, 166, 184, 0.45);
+}
+
+:root[data-theme-mode="modern"] .device-debug-minmax label {
+    color: #5b6574;
+}
+
+:root[data-theme-mode="modern"] .device-debug-minmax input {
+    background: rgba(255, 255, 255, 0.78);
+    color: #1d2a38;
+    border-color: rgba(153, 166, 184, 0.45);
+}
+
+:root[data-theme-mode="modern"] .device-debug-btns .handy-connect-btn:hover {
+    background: rgba(255, 255, 255, 0.95);
+}
+
+:root[data-theme-mode="modern"] .device-coming-soon svg {
+    color: #6b7a8e;
+}
+
+:root[data-theme-mode="modern"] .device-coming-soon span {
+    color: #6b7a8e;
+}
+
+:root[data-theme-mode="modern"] .handy-error {
+    background: rgba(239, 68, 68, 0.08);
+    color: #b91c1c;
+}
