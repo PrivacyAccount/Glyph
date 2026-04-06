@@ -6,7 +6,7 @@
  * \\.\pipe\glyph-mpv-ipc using mpv's JSON IPC protocol.
  */
 
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const net = require('net');
@@ -26,6 +26,31 @@ class MpvController {
         this._playlistTempPath = null;
     }
 
+    _hasSystemMpv() {
+        try {
+            const cmd = process.platform === 'win32' ? 'where' : 'which';
+            const probe = spawnSync(cmd, ['mpv'], { stdio: 'ignore' });
+            return probe && probe.status === 0;
+        } catch {
+            return false;
+        }
+    }
+
+    _getAssetsDir() {
+        const candidates = [
+            // Development
+            path.join(__dirname, '..', 'vendor', 'mpv'),
+            // Packaged
+            path.join(process.resourcesPath || '', 'vendor', 'mpv'),
+        ];
+        for (const p of candidates) {
+            try {
+                if (fs.existsSync(p)) return p;
+            } catch { }
+        }
+        return null;
+    }
+
     /**
      * Resolve the path to the bundled mpv.exe
      */
@@ -41,16 +66,24 @@ class MpvController {
     }
 
     _getMpvPath() {
-        // Development: relative to electron/ -> ../vendor/mpv/mpv.exe
-        const devPath = path.join(__dirname, '..', 'vendor', 'mpv', 'mpv.exe');
-        if (fs.existsSync(devPath)) return devPath;
+        // On macOS prefer system mpv (brew-installed) to avoid incompatibilities
+        // with CI-copied binaries and missing runtime deps on user machines.
+        if (process.platform === 'darwin' && this._hasSystemMpv()) {
+            return 'mpv';
+        }
 
-        // Packaged app: resources/vendor/mpv/mpv.exe
-        const prodPath = path.join(process.resourcesPath || '', 'vendor', 'mpv', 'mpv.exe');
-        if (fs.existsSync(prodPath)) return prodPath;
+        const assetsDir = this._getAssetsDir();
+        const isWin = process.platform === 'win32';
+        const bundledName = isWin ? 'mpv.exe' : 'mpv';
+
+        if (assetsDir) {
+            const bundledPath = path.join(assetsDir, bundledName);
+            if (fs.existsSync(bundledPath)) return bundledPath;
+        }
 
         // Fallback: system PATH
-        return 'mpv';
+        if (this._hasSystemMpv()) return 'mpv';
+        return null;
     }
 
     /**
@@ -67,6 +100,10 @@ class MpvController {
         this.mainWindow = mainWindow;
 
         const mpvPath = this._getMpvPath();
+        if (!mpvPath) {
+            throw new Error('MPV binary not found. Install mpv or bundle it under vendor/mpv.');
+        }
+        const assetsDir = this._getAssetsDir();
         const thumbfastEnabled = options?.thumbfastEnabled !== false;
 
         // Get initial content bounds to set geometry
@@ -75,10 +112,6 @@ class MpvController {
         const args = [
             '--no-config',
             '--osc=no',
-            `--script=${path.join(path.dirname(mpvPath), 'scripts', 'modernx.lua')}`,
-            `--script=${path.join(path.dirname(mpvPath), 'scripts', 'vr360.lua')}`,
-            `--osd-fonts-dir=${path.join(path.dirname(mpvPath), 'fonts')}`,
-            `--sub-fonts-dir=${path.join(path.dirname(mpvPath), 'fonts')}`,
             '--osd-level=1',
             '--cursor-autohide=1000',
             '--input-cursor=yes',
@@ -88,7 +121,9 @@ class MpvController {
             `--input-ipc-server=${PIPE_NAME}`,
             '--vo=gpu',
             '--gpu-context=auto',
-            '--hwdec=auto-safe',
+            // macOS: disable hwdec to avoid black-screen regressions on some setups
+            // (especially when MPV comes from Homebrew and app is unsigned/notarization-pending).
+            process.platform === 'darwin' ? '--hwdec=no' : '--hwdec=auto-safe',
             '--hr-seek=yes',
             '--border=no',
             '--title-bar=no',
@@ -96,8 +131,21 @@ class MpvController {
             `--geometry=${bounds.width}x${bounds.height}+${bounds.x}+${bounds.y}`
         ];
 
-        if (thumbfastEnabled) {
-            args.push(`--script=${path.join(path.dirname(mpvPath), 'scripts', 'thumbfast.lua')}`);
+        if (assetsDir) {
+            const modernxScript = path.join(assetsDir, 'scripts', 'modernx.lua');
+            const vrScript = path.join(assetsDir, 'scripts', 'vr360.lua');
+            const thumbfastScript = path.join(assetsDir, 'scripts', 'thumbfast.lua');
+            const fontsDir = path.join(assetsDir, 'fonts');
+
+            if (fs.existsSync(modernxScript)) args.push(`--script=${modernxScript}`);
+            if (fs.existsSync(vrScript)) args.push(`--script=${vrScript}`);
+            if (fs.existsSync(fontsDir)) {
+                args.push(`--osd-fonts-dir=${fontsDir}`);
+                args.push(`--sub-fonts-dir=${fontsDir}`);
+            }
+            if (thumbfastEnabled && fs.existsSync(thumbfastScript)) {
+                args.push(`--script=${thumbfastScript}`);
+            }
         }
         if (options?.autoFullscreen === true) {
             args.push('--fullscreen=yes');
@@ -207,7 +255,7 @@ class MpvController {
             args.push(filePath);
         }
 
-        console.log(`[mpv] Starting: ${mpvPath} ${args.join(' ')}`);
+        console.log(`[mpv] Starting (platform=${process.platform}, source=${mpvPath === 'mpv' ? 'system' : 'bundled'}): ${mpvPath} ${args.join(' ')}`);
 
         this.process = spawn(mpvPath, args, {
             windowsHide: true,
