@@ -3,7 +3,7 @@ const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { execFile } = require('child_process');
+const { execFile, spawnSync } = require('child_process');
 const { DatabaseSync } = require('node:sqlite');
 const { v4: uuidv4 } = require('uuid');
 const crypto = require('crypto');
@@ -13,9 +13,29 @@ function generateStableId(str) {
 }
 const tmdb = require('./tmdb');
 const ffmpeg = require('fluent-ffmpeg');
-const ffmpegPath = require('ffmpeg-static');
-const ffprobePath = require('ffprobe-static').path;
+const ffmpegStaticPath = require('ffmpeg-static');
+const ffprobeStaticPath = require('ffprobe-static').path;
 const { createRuntimeLogger } = require('./runtimeLogs');
+
+function isRunnableBinary(binPathOrName) {
+    const candidate = String(binPathOrName || '').trim();
+    if (!candidate) return false;
+    try {
+        const probe = spawnSync(candidate, ['-version'], { stdio: 'ignore', timeout: 2500 });
+        return probe && probe.status === 0;
+    } catch {
+        return false;
+    }
+}
+
+function resolveFfmpegBinary(preferred, fallbackName) {
+    if (isRunnableBinary(preferred)) return preferred;
+    if (isRunnableBinary(fallbackName)) return fallbackName;
+    return preferred || fallbackName;
+}
+
+const ffmpegPath = resolveFfmpegBinary(ffmpegStaticPath, 'ffmpeg');
+const ffprobePath = resolveFfmpegBinary(ffprobeStaticPath, 'ffprobe');
 
 ffmpeg.setFfmpegPath(ffmpegPath);
 ffmpeg.setFfprobePath(ffprobePath);
@@ -173,6 +193,8 @@ try {
 } catch { }
 console.log(`[GlyphServer] DATA_DIR=${DATA_DIR}`);
 console.log(`[GlyphServer] DATA_DIR_SOURCE=${DATA_DIR_INFO.source}`);
+console.log(`[GlyphServer] ffmpeg=${ffmpegPath}`);
+console.log(`[GlyphServer] ffprobe=${ffprobePath}`);
 
 function saveDataDirConfig(nextDataDir) {
     const rootDir = path.dirname(DATA_DIR_CONFIG_PATH);
@@ -5577,6 +5599,16 @@ function getVideoFolderMetadata(video) {
     }
 }
 
+function getVideoMetadata(video) {
+    try {
+        const filePath = String(video?.filePath || '').trim();
+        if (!filePath) return {};
+        return getMetadata(filePath) || {};
+    } catch {
+        return {};
+    }
+}
+
 function parseNumericRating(value) {
     const n = Number(value);
     if (!Number.isFinite(n)) return null;
@@ -5611,10 +5643,11 @@ function getVideoReleasedDate(video, folderMeta) {
     return null;
 }
 
-function getVideoIsFavorite(video, folderMeta) {
+function getVideoIsFavorite(video, _folderMeta) {
     const tags = Array.isArray(video?.tags) ? video.tags.map((t) => String(t || '').toLowerCase()) : [];
     if (tags.some((t) => t.includes('favorite') || t.includes('favorit') || t === 'fav')) return true;
-    if (folderMeta?.favorite === true) return true;
+    const videoMeta = getVideoMetadata(video);
+    if (videoMeta?.favorite === true) return true;
     return false;
 }
 
@@ -6094,10 +6127,11 @@ function applyHeresphereWriteBack(video, body) {
     const hasRating = Number.isFinite(Number(body?.rating));
     const hasFavorite = typeof body?.isFavorite === 'boolean';
     if (hasRating || hasFavorite) {
-        const meta = getMetadata(video.directory) || {};
+        const metaPath = hasFavorite ? String(video.filePath || '') : String(video.directory || '');
+        const meta = getMetadata(metaPath) || {};
         if (hasRating) meta.rating = Number(body.rating);
         if (hasFavorite) meta.favorite = Boolean(body.isFavorite);
-        setMetadata(video.directory, meta);
+        setMetadata(metaPath, meta);
         changed = true;
     }
 
@@ -7969,11 +8003,11 @@ app.post('/api/videos/:id/favorite', (req, res) => {
     if (!video) return res.status(404).json({ error: 'Video not found' });
     if (typeof req.body?.isFavorite !== 'boolean') return res.status(400).json({ error: 'Missing isFavorite' });
     try {
-        const folderPath = String(video?.directory || path.dirname(String(video?.filePath || '')) || '').trim();
-        if (!folderPath) return res.status(400).json({ error: 'Missing folder path' });
-        const metadata = getMetadata(folderPath) || {};
+        const filePath = String(video?.filePath || '').trim();
+        if (!filePath) return res.status(400).json({ error: 'Missing file path' });
+        const metadata = getMetadata(filePath) || {};
         metadata.favorite = Boolean(req.body.isFavorite);
-        setMetadata(folderPath, metadata);
+        setMetadata(filePath, metadata);
         res.json({ success: true, isFavorite: getVideoIsFavorite(video, metadata) });
     } catch (err) {
         res.status(500).json({ error: err.message || String(err) });
@@ -11392,10 +11426,6 @@ const startServer = () => {
 startServer();
 
 module.exports = app;
-
-
-
-
 
 
 
