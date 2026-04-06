@@ -26,14 +26,31 @@ class MpvController {
         this._playlistTempPath = null;
     }
 
-    _hasSystemMpv() {
+    _resolveSystemBinary(name) {
+        const bin = String(name || '').trim();
+        if (!bin) return null;
+        const isWin = process.platform === 'win32';
+        const cmd = isWin ? 'where' : 'which';
         try {
-            const cmd = process.platform === 'win32' ? 'where' : 'which';
-            const probe = spawnSync(cmd, ['mpv'], { stdio: 'ignore' });
-            return probe && probe.status === 0;
-        } catch {
-            return false;
+            const probe = spawnSync(cmd, [bin], { stdio: 'pipe', encoding: 'utf8' });
+            const out = String(probe?.stdout || '').split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+            if (probe && probe.status === 0 && out.length > 0) {
+                return out[0];
+            }
+        } catch { }
+        if (process.platform === 'darwin') {
+            const candidates = [
+                `/opt/homebrew/bin/${bin}`,
+                `/usr/local/bin/${bin}`,
+                `/opt/local/bin/${bin}`,
+            ];
+            for (const p of candidates) {
+                try {
+                    if (fs.existsSync(p)) return p;
+                } catch { }
+            }
         }
+        return null;
     }
 
     _getAssetsDir() {
@@ -68,8 +85,9 @@ class MpvController {
     _getMpvPath() {
         // On macOS prefer system mpv (brew-installed) to avoid incompatibilities
         // with CI-copied binaries and missing runtime deps on user machines.
-        if (process.platform === 'darwin' && this._hasSystemMpv()) {
-            return 'mpv';
+        if (process.platform === 'darwin') {
+            const systemMpv = this._resolveSystemBinary('mpv');
+            if (systemMpv) return systemMpv;
         }
 
         const assetsDir = this._getAssetsDir();
@@ -82,7 +100,8 @@ class MpvController {
         }
 
         // Fallback: system PATH
-        if (this._hasSystemMpv()) return 'mpv';
+        const systemMpv = this._resolveSystemBinary('mpv');
+        if (systemMpv) return systemMpv;
         return null;
     }
 

@@ -28,9 +28,35 @@ function isRunnableBinary(binPathOrName) {
     }
 }
 
+function resolveSystemBinary(name) {
+    const bin = String(name || '').trim();
+    if (!bin) return '';
+    try {
+        const cmd = process.platform === 'win32' ? 'where' : 'which';
+        const probe = spawnSync(cmd, [bin], { stdio: 'pipe', encoding: 'utf8', timeout: 2500 });
+        const out = String(probe?.stdout || '')
+            .split(/\r?\n/)
+            .map((s) => s.trim())
+            .filter(Boolean);
+        if (probe && probe.status === 0 && out.length > 0) return out[0];
+    } catch { }
+    if (process.platform === 'darwin') {
+        const candidates = [
+            `/opt/homebrew/bin/${bin}`,
+            `/usr/local/bin/${bin}`,
+            `/opt/local/bin/${bin}`,
+        ];
+        for (const p of candidates) {
+            try { if (fs.existsSync(p)) return p; } catch { }
+        }
+    }
+    return '';
+}
+
 function resolveFfmpegBinary(preferred, fallbackName) {
     if (isRunnableBinary(preferred)) return preferred;
-    if (isRunnableBinary(fallbackName)) return fallbackName;
+    const resolvedFallback = resolveSystemBinary(fallbackName) || fallbackName;
+    if (isRunnableBinary(resolvedFallback)) return resolvedFallback;
     return preferred || fallbackName;
 }
 
@@ -11426,7 +11452,6 @@ const startServer = () => {
 startServer();
 
 module.exports = app;
-
 
 
 
