@@ -19,6 +19,21 @@ jobs:
           cache: npm
       - name: Install
         run: npm ci
+      - name: Prepare bundled MPV (Windows)
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force -Path "vendor\mpv" | Out-Null
+          choco install mpv -y --no-progress
+          $mpvCmd = Get-Command mpv.exe -ErrorAction SilentlyContinue
+          $mpvPath = $null
+          if ($mpvCmd) { $mpvPath = $mpvCmd.Source }
+          if (-not $mpvPath) {
+            $candidate = Get-ChildItem "C:\ProgramData\chocolatey\lib" -Recurse -Filter mpv.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($candidate) { $mpvPath = $candidate.FullName }
+          }
+          if (-not $mpvPath) { throw "mpv.exe not found after Chocolatey install" }
+          Copy-Item $mpvPath "vendor\mpv\mpv.exe" -Force
+          Write-Host "Bundled mpv from: $mpvPath"
       - name: Build Windows Client + Server
         run: npm run pack:all:win
       - name: Upload Client Artifacts
