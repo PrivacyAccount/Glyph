@@ -12,7 +12,10 @@ const fs = require('fs');
 const net = require('net');
 const os = require('os');
 
-const PIPE_NAME = '\\\\.\\pipe\\glyph-mpv-ipc';
+function getIpcEndpoint() {
+    if (process.platform === 'win32') return '\\\\.\\pipe\\glyph-mpv-ipc';
+    return path.join(os.tmpdir(), 'glyph-mpv-ipc.sock');
+}
 
 class MpvController {
     constructor() {
@@ -24,6 +27,7 @@ class MpvController {
         this._buffer = '';
         this._destroyed = false;
         this._playlistTempPath = null;
+        this.ipcEndpoint = getIpcEndpoint();
     }
 
     _resolveSystemBinary(name) {
@@ -137,7 +141,7 @@ class MpvController {
             '--keep-open=yes',
             '--idle=no',
             '--force-window=immediate',
-            `--input-ipc-server=${PIPE_NAME}`,
+            `--input-ipc-server=${this.ipcEndpoint}`,
             '--vo=gpu',
             '--gpu-context=auto',
             // macOS: disable hwdec to avoid black-screen regressions on some setups
@@ -149,6 +153,13 @@ class MpvController {
             '--ontop=no',
             `--geometry=${bounds.width}x${bounds.height}+${bounds.x}+${bounds.y}`
         ];
+
+        // On Unix sockets, remove stale endpoint from prior crashes.
+        if (process.platform !== 'win32') {
+            try {
+                if (fs.existsSync(this.ipcEndpoint)) fs.unlinkSync(this.ipcEndpoint);
+            } catch { }
+        }
 
         if (assetsDir) {
             const modernxScript = path.join(assetsDir, 'scripts', 'modernx.lua');
@@ -363,7 +374,9 @@ class MpvController {
 
     _tryConnect() {
         return new Promise((resolve, reject) => {
-            const socket = net.connect(PIPE_NAME);
+            const socket = process.platform === 'win32'
+                ? net.connect(this.ipcEndpoint)
+                : net.connect({ path: this.ipcEndpoint });
             socket.on('connect', () => {
                 this.socket = socket;
                 this._buffer = '';
@@ -610,6 +623,11 @@ class MpvController {
         if (this._playlistTempPath) {
             try { fs.unlinkSync(this._playlistTempPath); } catch { }
             this._playlistTempPath = null;
+        }
+        if (process.platform !== 'win32') {
+            try {
+                if (this.ipcEndpoint && fs.existsSync(this.ipcEndpoint)) fs.unlinkSync(this.ipcEndpoint);
+            } catch { }
         }
         this.process = null;
     }
