@@ -15,8 +15,14 @@ jobs:
       - name: Use Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
+      - name: Read app version
+        id: meta
+        shell: powershell
+        run: |
+          $v = node -p "require('./package.json').version"
+          "version=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
       - name: Install
         run: npm ci
       - name: Prepare bundled MPV (Windows)
@@ -42,13 +48,13 @@ jobs:
       - name: Upload Client Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: glyph-client-windows
+          name: glyph-client-windows-${{ steps.meta.outputs.version }}
           path: |
             dist-client/*Setup*.exe
       - name: Upload Server Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: glyph-server-windows
+          name: glyph-server-windows-${{ steps.meta.outputs.version }}
           path: |
             dist-server/*Setup*.exe
 
@@ -60,10 +66,27 @@ jobs:
       - name: Use Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
+      - name: Read app version
+        id: meta
+        run: |
+          echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
       - name: Install
         run: npm ci
+      - name: Prepare bundled MPV (Linux)
+        run: |
+          mkdir -p vendor/mpv
+          sudo apt-get update
+          sudo apt-get install -y mpv
+          MPV_PATH="$(command -v mpv || true)"
+          if [ -z "$MPV_PATH" ]; then
+            echo "mpv not found after apt install"
+            exit 1
+          fi
+          cp "$MPV_PATH" vendor/mpv/mpv
+          chmod +x vendor/mpv/mpv
+          echo "Bundled mpv from: $MPV_PATH"
       - name: Build client frontend
         run: npm run build:client
       - name: Build Linux Client AppImage
@@ -73,12 +96,60 @@ jobs:
       - name: Upload Client Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: glyph-client-linux
+          name: glyph-client-linux-${{ steps.meta.outputs.version }}
           path: |
             dist-client/*.AppImage
       - name: Upload Server Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: glyph-server-linux
+          name: glyph-server-linux-${{ steps.meta.outputs.version }}
           path: |
             dist-server/*.AppImage
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Use Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Read app version
+        id: meta
+        run: |
+          echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Install
+        run: npm ci
+      - name: Prepare bundled MPV (macOS)
+        run: |
+          mkdir -p vendor/mpv
+          brew update
+          brew install mpv
+          MPV_PATH="$(command -v mpv || true)"
+          if [ -z "$MPV_PATH" ]; then
+            echo "mpv not found after brew install"
+            exit 1
+          fi
+          cp "$MPV_PATH" vendor/mpv/mpv
+          chmod +x vendor/mpv/mpv
+          echo "Bundled mpv from: $MPV_PATH"
+      - name: Build client frontend
+        run: npm run build:client
+      - name: Build macOS Client ZIP
+        run: npx electron-builder --config electron-builder.client.json --mac zip --publish never
+      - name: Build macOS Server ZIP
+        run: npx electron-builder --config electron-builder.server.json --mac zip --publish never
+      - name: Upload Client Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: glyph-client-macos-${{ steps.meta.outputs.version }}
+          path: |
+            dist-client/*.zip
+      - name: Upload Server Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: glyph-server-macos-${{ steps.meta.outputs.version }}
+          path: |
+            dist-server/*.zip

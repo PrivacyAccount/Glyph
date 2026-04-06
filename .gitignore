@@ -20,3 +20,7 @@ glyph-tv-android/build-kotlin.log
 # OS/editor noise
 .DS_Store
 Thumbs.db
+
+# Local bundled MPV binaries (CI creates these at build time)
+vendor/mpv/mpv.exe
+vendor/mpv/mpv
