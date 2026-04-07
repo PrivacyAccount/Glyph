@@ -33,6 +33,7 @@ function VideoCard({
     const [thumbAttempt, setThumbAttempt] = useState(0);
     const [isFavorite, setIsFavorite] = useState(!!video?.isFavorite);
     const [favoriteSaving, setFavoriteSaving] = useState(false);
+    const [resolutionLabel, setResolutionLabel] = useState('');
     const cardRef = useRef(null);
     const previewTimerRef = useRef(null);
     const previewRetryRef = useRef(null);
@@ -88,6 +89,8 @@ function VideoCard({
                     if (!mounted) return;
                     const sec = Number(data?.duration || 0);
                     if (sec > 0) setVideoDurationMs(sec * 1000);
+                    const label = computeResolutionLabel(data?.width, data?.height);
+                    if (label) setResolutionLabel(label);
                 })
                 .catch(() => { });
         }
@@ -96,6 +99,11 @@ function VideoCard({
             controller.abort();
         };
     }, [video.id, video.hasFunscript, resumePositionSec, isNearViewport, isInViewport]);
+
+    useEffect(() => {
+        const label = computeResolutionLabel(video?.width, video?.height);
+        setResolutionLabel(label || '');
+    }, [video?.id, video?.width, video?.height]);
 
     useEffect(() => {
         if (cardRef.current) {
@@ -129,6 +137,18 @@ function VideoCard({
             return `${String(hrs)}:${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
         }
         return `${String(min)}:${String(sec).padStart(2, '0')}`;
+    };
+
+    const computeResolutionLabel = (widthRaw, heightRaw) => {
+        const width = Number(widthRaw || 0);
+        const height = Number(heightRaw || 0);
+        if (!(width > 0) || !(height > 0)) return '';
+        if (height >= 2160) return '4K';
+        if (height >= 1440) return '1440p';
+        if (height >= 1080) return '1080p';
+        if (height >= 720) return '720p';
+        if (height >= 480) return '480p';
+        return `${Math.round(height)}p`;
     };
 
     const isFemalePerformer = (performer) => {
@@ -354,6 +374,11 @@ function VideoCard({
                 {videoDurationMs > 0 && (
                     <span className="video-card-duration-badge" title={`${t('duration', 'Duration')}: ${formatDurationShort(videoDurationMs)}`}>
                         {formatDurationShort(videoDurationMs)}
+                    </span>
+                )}
+                {resolutionLabel && (
+                    <span className="video-card-resolution-badge" title={`${t('resolution', 'Resolution')}: ${resolutionLabel}`}>
+                        {resolutionLabel}
                     </span>
                 )}
                 {video.isVr && (

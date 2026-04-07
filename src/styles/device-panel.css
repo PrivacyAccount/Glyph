@@ -952,3 +952,315 @@
     background: rgba(239, 68, 68, 0.08);
     color: #b91c1c;
 }
+
+/* ── TCode Axis Grid ───────────────────────────────────────────────── */
+
+/* ── TCode Axes Table ──────────────────────────────────────────────── */
+
+.tcode-axes-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.78rem;
+}
+
+.tcode-axes-table thead th {
+    font-size: 0.68rem;
+    font-weight: 600;
+    color: var(--text-secondary, #888);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 2px 6px 4px;
+    text-align: left;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.tcode-axes-table thead th:first-child {
+    width: 14px;
+    padding-right: 2px;
+}
+
+.tcode-axes-table tbody tr {
+    transition: opacity 0.15s;
+}
+
+.tcode-axes-table tbody td {
+    padding: 3px 6px;
+    vertical-align: middle;
+}
+
+.tcode-row-inactive {
+    opacity: 0.32;
+}
+
+.tcode-cell-name {
+    font-weight: 600;
+    font-size: 0.78rem;
+    color: var(--text-primary, #f0f0f5);
+    white-space: nowrap;
+    min-width: 50px;
+}
+
+.tcode-cell-pos {
+    min-width: 90px;
+}
+
+.tcode-cell-muted {
+    color: var(--text-secondary, #666);
+    font-size: 0.72rem;
+}
+
+.tcode-axis-bar-row {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.tcode-axis-bar {
+    flex: 1;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.08);
+    overflow: hidden;
+}
+
+.tcode-axis-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    background: #818cf8;
+    transition: width 0.06s linear;
+}
+
+.tcode-axis-value {
+    font-size: 0.68rem;
+    font-family: monospace;
+    color: #818cf8;
+    min-width: 24px;
+    text-align: right;
+    font-weight: 600;
+}
+
+.tcode-axis-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.tcode-axis-dot.active {
+    background: #22c55e;
+    box-shadow: 0 0 5px rgba(34, 197, 94, 0.5);
+    animation: pulse-dot 2s ease-in-out infinite;
+}
+
+.tcode-cell-range,
+.tcode-cell-speed {
+    white-space: nowrap;
+}
+
+.tcode-cell-range input[type="number"],
+.tcode-cell-speed input[type="number"] {
+    width: 38px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    color: var(--text-primary, #f0f0f5);
+    padding: 2px 3px;
+    font-size: 0.72rem;
+    text-align: center;
+    font-family: monospace;
+}
+
+.tcode-cell-range input[type="number"]:focus,
+.tcode-cell-speed input[type="number"]:focus {
+    outline: none;
+    border-color: #818cf8;
+}
+
+.tcode-cell-range span {
+    color: var(--text-secondary, #888);
+    font-size: 0.7rem;
+    margin: 0 2px;
+}
+
+.tcode-hint-small {
+    color: var(--text-secondary, #666);
+    font-size: 0.7rem;
+    margin-left: 2px;
+}
+
+/* ── TCode Settings ────────────────────────────────────────────────── */
+
+.tcode-settings-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.tcode-smoothing-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+    font-size: 0.78rem;
+    color: var(--text-primary, #f0f0f5);
+    cursor: pointer;
+}
+
+.tcode-smoothing-label > span {
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.tcode-toggle-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-secondary, #888);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    user-select: none;
+}
+
+.tcode-toggle-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.18);
+}
+
+.tcode-toggle-btn.active {
+    background: rgba(99, 102, 241, 0.15);
+    border-color: rgba(99, 102, 241, 0.4);
+    color: #a5b4fc;
+}
+
+.tcode-toggle-btn.active:hover {
+    background: rgba(99, 102, 241, 0.22);
+}
+
+.tcode-toggle-btn svg {
+    flex-shrink: 0;
+    opacity: 0.7;
+}
+
+.tcode-toggle-btn.active svg {
+    opacity: 1;
+}
+
+.tcode-toggle-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.82rem;
+    color: var(--text-primary, #f0f0f5);
+    cursor: pointer;
+}
+
+.tcode-toggle-row > span:first-child {
+    font-weight: 600;
+}
+
+.tcode-select {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 6px;
+    color: var(--text-primary, #f0f0f5);
+    padding: 5px 10px;
+    font-size: 0.78rem;
+    cursor: pointer;
+    outline: none;
+    -webkit-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23888'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    padding-right: 24px;
+}
+
+.tcode-select:focus {
+    border-color: #818cf8;
+}
+
+.tcode-select option {
+    background: #1e1e2e;
+    color: #f0f0f5;
+    padding: 4px 8px;
+}
+
+/* ── TCode Modern theme ────────────────────────────────────────────── */
+
+:root[data-theme-mode="modern"] .tcode-axes-table thead th {
+    color: #6b7a8e;
+    border-bottom-color: rgba(0, 0, 0, 0.08);
+}
+
+:root[data-theme-mode="modern"] .tcode-cell-name {
+    color: #1d2a38;
+}
+
+:root[data-theme-mode="modern"] .tcode-axis-bar {
+    background: rgba(0, 0, 0, 0.06);
+}
+
+:root[data-theme-mode="modern"] .tcode-axis-bar-fill {
+    background: #6366f1;
+}
+
+:root[data-theme-mode="modern"] .tcode-axis-value {
+    color: #6366f1;
+}
+
+:root[data-theme-mode="modern"] .tcode-select {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0.5));
+    border-color: var(--glass-border, rgba(255, 255, 255, 0.62));
+    color: #1d2a38;
+    box-shadow: 0 2px 6px rgba(16, 24, 40, 0.06);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%234a5568'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+}
+
+:root[data-theme-mode="modern"] .tcode-select:focus {
+    border-color: #6366f1;
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
+}
+
+:root[data-theme-mode="modern"] .tcode-select option {
+    background: #f5f7fa;
+    color: #1d2a38;
+}
+
+:root[data-theme-mode="modern"] .tcode-toggle-btn {
+    background: rgba(255, 255, 255, 0.5);
+    border-color: rgba(153, 166, 184, 0.3);
+    color: #6b7a8e;
+}
+
+:root[data-theme-mode="modern"] .tcode-toggle-btn:hover {
+    background: rgba(255, 255, 255, 0.7);
+}
+
+:root[data-theme-mode="modern"] .tcode-toggle-btn.active {
+    background: rgba(99, 102, 241, 0.1);
+    border-color: rgba(99, 102, 241, 0.35);
+    color: #6366f1;
+}
+
+:root[data-theme-mode="modern"] .tcode-cell-range input[type="number"],
+:root[data-theme-mode="modern"] .tcode-cell-speed input[type="number"] {
+    background: rgba(255, 255, 255, 0.7);
+    border-color: rgba(153, 166, 184, 0.4);
+    color: #1d2a38;
+}
+
+:root[data-theme-mode="modern"] .tcode-cell-range input[type="number"]:focus,
+:root[data-theme-mode="modern"] .tcode-cell-speed input[type="number"]:focus {
+    border-color: #6366f1;
+}

@@ -329,6 +329,7 @@ function AppContent() {
                 await window.electronAPI.openPlayerWindow({
                     videoId: video.id,
                     startSeconds,
+                    ...(queueVideos && queueVideos.length > 1 ? { queueVideos } : {}),
                 });
                 return;
             } catch (err) {

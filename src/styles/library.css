@@ -711,7 +711,7 @@
 
 .video-card-favorite-btn {
   position: absolute;
-  bottom: 8px;
+  bottom: 34px;
   right: 8px;
   background: rgba(0, 0, 0, 0.65);
   backdrop-filter: blur(6px);
@@ -726,7 +726,15 @@
   justify-content: center;
   z-index: 2;
   cursor: pointer;
-  transition: background-color .16s ease, border-color .16s ease, transform .16s ease, color .16s ease;
+  opacity: 0;
+  pointer-events: none;
+  transition: background-color .16s ease, border-color .16s ease, transform .16s ease, color .16s ease, opacity .16s ease;
+}
+
+.video-card:hover .video-card-favorite-btn,
+.video-card-favorite-btn.active {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .video-card-favorite-btn:hover {
@@ -770,6 +778,20 @@
   border-radius: 4px;
   font-size: 10px;
   font-weight: 600;
+  color: rgba(245, 248, 255, 0.96);
+  z-index: 2;
+}
+
+.video-card-resolution-badge {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  background: rgba(0, 0, 0, 0.66);
+  backdrop-filter: blur(6px);
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
   color: rgba(245, 248, 255, 0.96);
   z-index: 2;
 }
@@ -950,10 +972,15 @@
 }
 
 .video-card.list-mode .video-card-favorite-btn,
-.video-card.list-mode .video-card-duration-badge {
+.video-card.list-mode .video-card-duration-badge,
+.video-card.list-mode .video-card-resolution-badge {
   font-size: 9px;
   padding: 0;
   bottom: 5px;
+}
+
+.video-card.list-mode .video-card-favorite-btn {
+  bottom: 27px;
 }
 
 @media (max-width: 980px) {

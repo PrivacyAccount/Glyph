@@ -13,6 +13,18 @@ import useHoverPreviewEnabled from '../hooks/useHoverPreviewEnabled';
 import useSelectionHotkeys from '../hooks/useSelectionHotkeys';
 import { fetchVideoDetails } from '../services/videoMetaService';
 
+function getResolutionLabel(video) {
+    const w = Number(video?.width || 0);
+    const h = Number(video?.height || 0);
+    if (!(w > 0) || !(h > 0)) return '';
+    if (h >= 2160) return '4K';
+    if (h >= 1440) return '1440p';
+    if (h >= 1080) return '1080p';
+    if (h >= 720) return '720p';
+    if (h >= 480) return '480p';
+    return `${Math.round(h)}p`;
+}
+
 function SeriesDetail({ folderPath, folderName, openImagesOnLoad = false, onBack, onPlay, onOpenFunscriptManager }) {
     const { t } = useI18n();
     const [detail, setDetail] = useState(null);
@@ -816,7 +828,7 @@ function EpisodeListView({ videos, onPlay, onContextMenu, heatmapDurations, sele
                     <div className="episode-info">
                         <div className="episode-title">{video.title}</div>
                         <div className="episode-meta">
-                            <span>{video.extension.replace('.', '').toUpperCase()}</span>
+                            <span>{getResolutionLabel(video) || String(video?.extension || '').replace('.', '').toUpperCase() || '—'}</span>
                             {video.hasFunscript && <span className="episode-fs-badge">FS</span>}
                         </div>
                         {Array.isArray(video.tags) && video.tags.length > 0 && (
@@ -938,7 +950,7 @@ function EpisodeGridCard({ video, index, onPlay, onContextMenu, heatmapDurationM
             )}
             <div className="episode-grid-info">
                 <div className="episode-grid-title">{video.title}</div>
-                <div className="episode-grid-meta">{video.extension.replace('.', '').toUpperCase()}</div>
+                <div className="episode-grid-meta">{getResolutionLabel(video) || String(video?.extension || '').replace('.', '').toUpperCase() || '—'}</div>
                 {Array.isArray(video.tags) && video.tags.length > 0 && (
                     <div className="item-tag-row">
                         {video.tags.slice(0, 2).map(tag => (

@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     openVideo: (filePath) => ipcRenderer.invoke('open-video', filePath),
     openWithPlayer: (payload) => ipcRenderer.invoke('open-with-player', payload),
     openPlayerWindow: (payload) => ipcRenderer.invoke('open-player-window', payload),
+    getPlayerLaunchContext: (payload) => ipcRenderer.invoke('get-player-launch-context', payload),
     windowMinimize: () => ipcRenderer.invoke('window-minimize'),
     windowToggleMaximize: () => ipcRenderer.invoke('window-toggle-maximize'),
     windowClose: () => ipcRenderer.invoke('window-close'),

@@ -7,7 +7,7 @@ import AppDropdown from './AppDropdown';
 import '../styles/device-panel.css';
 
 const TABS = ['thehandy', 'tcode', 'buttplug'];
-const DISABLED_TABS = new Set(['tcode']);
+const DISABLED_TABS = new Set([]);
 const DEBUG_ENABLE_KEY = 'glyph_device_debug_enabled';
 const DEBUG_RANGE_MIN_KEY = 'glyph_device_debug_range_min';
 const DEBUG_RANGE_MAX_KEY = 'glyph_device_debug_range_max';
@@ -498,21 +498,41 @@ function DevicePanel({ open, onClose }) {
     // â”€â”€ TCode Connect â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const handleTcConnect = useCallback(async () => {
         try {
+            setTcStatus('connecting');
             const info = await tcode.connect();
             setTcPortInfo(info);
             setTcStatus('connected');
             isTcConnectedRef.current = true;
         } catch (err) {
             console.error('[TCode] Connection error:', err);
+            setTcStatus('disconnected');
+            if (err?.name !== 'NotFoundError') {
+                // NotFoundError = user cancelled port picker, no need to alert
+                alert(`TCode: ${err.message || err}`);
+            }
         }
     }, []);
 
     const handleTcDisconnect = useCallback(async () => {
-        await tcode.disconnect();
+        try {
+            await tcode.disconnect();
+        } catch (err) {
+            console.error('[TCode] Disconnect error:', err);
+        }
         setTcStatus('disconnected');
         setTcPortInfo(null);
         setTcSyncState('idle');
         isTcConnectedRef.current = false;
+    }, []);
+
+    // Auto-disconnect when device is physically unplugged
+    useEffect(() => {
+        tcode.onDeviceDisconnect(() => {
+            setTcStatus('disconnected');
+            setTcPortInfo(null);
+            setTcSyncState('idle');
+            isTcConnectedRef.current = false;
+        });
     }, []);
 
     // â”€â”€ Listen for funscript-loaded events from VideoPlayer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -1829,6 +1849,44 @@ function ComingSoon({ label }) {
 
 function TCodeTab({ status, portInfo, syncState, onConnect, onDisconnect, t }) {
     const isConnected = status === 'connected';
+    const activeAxes = isConnected ? tcode.getActiveAxes() : [];
+    const [axisPositions, setAxisPositions] = useState({});
+    const [tcSettings, setTcSettings] = useState(() => tcode.getSettings());
+
+    // Poll axis positions at ~15Hz when connected and syncing
+    useEffect(() => {
+        if (!isConnected) { setAxisPositions({}); return; }
+        const iv = setInterval(() => {
+            setAxisPositions(tcode.getAxisPositions());
+        }, 66);
+        return () => clearInterval(iv);
+    }, [isConnected]);
+
+    const handleSettingChange = useCallback((key, value) => {
+        const patch = { [key]: value };
+        tcode.updateSettings(patch);
+        setTcSettings(tcode.getSettings());
+    }, []);
+
+    const handleAxisSettingChange = useCallback((axis, key, value) => {
+        const axPatch = { [axis]: { ...tcSettings.axes[axis], [key]: value } };
+        tcode.updateSettings({ axes: axPatch });
+        setTcSettings(tcode.getSettings());
+    }, [tcSettings]);
+
+    const AXIS_LABELS = {
+        'L0': 'Stroke (L0)',
+        'L1': 'Surge (L1)',
+        'L2': 'Sway (L2)',
+        'R0': 'Twist (R0)',
+        'R1': 'Roll (R1)',
+        'R2': 'Pitch (R2)',
+    };
+
+    const SHORT_LABELS = {
+        'L0': 'Stroke', 'L1': 'Surge', 'L2': 'Sway',
+        'R0': 'Twist', 'R1': 'Roll', 'R2': 'Pitch',
+    };
 
     return (
         <>
@@ -1839,9 +1897,12 @@ function TCodeTab({ status, portInfo, syncState, onConnect, onDisconnect, t }) {
                         <button
                             className="handy-connect-btn connect"
                             onClick={onConnect}
+                            disabled={status === 'connecting'}
                             style={{ width: '100%' }}
                         >
-                            {t('tcSelectPort', 'Seriellen Port wÃ¤hlen...')}
+                            {status === 'connecting'
+                                ? t('deviceConnecting', 'Verbinde...')
+                                : t('tcSelectPort', 'Seriellen Port wÃ¤hlen...')}
                         </button>
                     ) : (
                         <button
@@ -1862,6 +1923,7 @@ function TCodeTab({ status, portInfo, syncState, onConnect, onDisconnect, t }) {
                     <div className="handy-status-info">
                         <div className="handy-status-label">
                             {status === 'connected' && t('deviceConnected', 'Verbunden')}
+                            {status === 'connecting' && t('deviceConnecting', 'Verbinde...')}
                             {status === 'disconnected' && t('deviceDisconnected', 'Nicht verbunden')}
                         </div>
                         {isConnected && portInfo && (
@@ -1895,6 +1957,95 @@ function TCodeTab({ status, portInfo, syncState, onConnect, onDisconnect, t }) {
                             <span>{t('deviceSyncReadyLocal', 'Lokal berechnet â€” Wiedergabe startet automatisch')}</span>
                         </div>
                     )}
+                </div>
+            )}
+        
+            {/* ── TCode Settings ─────────────────────────────── */}
+            <div className="handy-section">
+                <div className="handy-section-title">{t('settings', 'Einstellungen')}</div>
+                <div className="tcode-settings-row">
+                    <button
+                        className={`tcode-toggle-btn ${tcSettings.autoHome ? 'active' : ''}`}
+                        onClick={() => handleSettingChange('autoHome', !tcSettings.autoHome)}
+                        title={t('tcAutoHomeHint', 'Bei Pause zur Mitte fahren')}
+                    >
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M3 10.5L12 3l9 7.5" /><path d="M5 10v9a1 1 0 001 1h3v-5h6v5h3a1 1 0 001-1v-9" />
+                        </svg>
+                    </button>
+                    <button
+                        className={`tcode-toggle-btn ${tcSettings.softStart ? 'active' : ''}`}
+                        onClick={() => handleSettingChange('softStart', !tcSettings.softStart)}
+                        title={t('tcSoftStartHint', 'Sanft in Bewegung einsteigen')}
+                    >
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M2 20c2-4 6-16 10-16s6 8 10 16" />
+                        </svg>
+                    </button>
+                    <label className="tcode-smoothing-label">
+                        <span>{t('tcSmoothing', 'Glättung')}</span>
+                        <select className="tcode-select" value={tcSettings.smoothing}
+                            onChange={e => handleSettingChange('smoothing', e.target.value)}>
+                            <option value="linear">Linear</option>
+                            <option value="pchip">PCHIP (Smooth)</option>
+                        </select>
+                    </label>
+                </div>
+            </div>
+
+            {/* ── Axes ───────────────────────────────────────── */}
+            {isConnected && (
+                <div className="handy-section">
+                    <div className="handy-section-title">{t('tcActiveAxes', 'Achsen')} ({activeAxes.length}/6)</div>
+                    <table className="tcode-axes-table">
+                        <thead>
+                            <tr>
+                                <th></th>
+                                <th>{t('tcAxisCol', 'Achse')}</th>
+                                <th>{t('tcPosCol', 'Pos')}</th>
+                                <th>{t('tcRange', 'Bereich')}</th>
+                                <th>{t('tcSpeedLimit', 'Limit')}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {['L0', 'L1', 'L2', 'R0', 'R1', 'R2'].map(axis => {
+                                const active = activeAxes.includes(axis);
+                                const pos = axisPositions[axis];
+                                const hasPos = active && pos != null;
+                                const axCfg = tcSettings.axes[axis] || {};
+                                return (
+                                    <tr key={axis} className={active ? 'tcode-row-active' : 'tcode-row-inactive'}>
+                                        <td><div className={`tcode-axis-dot ${active ? 'active' : ''}`} /></td>
+                                        <td className="tcode-cell-name">{SHORT_LABELS[axis]}</td>
+                                        <td className="tcode-cell-pos">
+                                            {hasPos ? (
+                                                <div className="tcode-axis-bar-row">
+                                                    <div className="tcode-axis-bar">
+                                                        <div className="tcode-axis-bar-fill" style={{ width: `${Math.min(100, Math.max(0, pos))}%` }} />
+                                                    </div>
+                                                    <span className="tcode-axis-value">{pos}</span>
+                                                </div>
+                                            ) : (
+                                                <span className="tcode-cell-muted">{active ? '—' : '–'}</span>
+                                            )}
+                                        </td>
+                                        <td className="tcode-cell-range">
+                                            <input type="number" min="0" max="100" value={axCfg.rangeMin ?? 0}
+                                                onChange={e => handleAxisSettingChange(axis, 'rangeMin', Math.max(0, Math.min(100, Number(e.target.value))))} />
+                                            <span>–</span>
+                                            <input type="number" min="0" max="100" value={axCfg.rangeMax ?? 100}
+                                                onChange={e => handleAxisSettingChange(axis, 'rangeMax', Math.max(0, Math.min(100, Number(e.target.value))))} />
+                                        </td>
+                                        <td className="tcode-cell-speed">
+                                            <input type="number" min="0" max="1000" step="10" value={axCfg.speedLimit ?? 0}
+                                                onChange={e => handleAxisSettingChange(axis, 'speedLimit', Math.max(0, Number(e.target.value)))} />
+                                            {(axCfg.speedLimit ?? 0) === 0 && <span className="tcode-hint-small">∞</span>}
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
                 </div>
             )}
         </>

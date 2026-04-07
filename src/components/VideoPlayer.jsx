@@ -227,6 +227,7 @@ function VideoPlayer({ onBack }) {
     const [activeHeatmapVideoId, setActiveHeatmapVideoId] = useState(String(id));
     const [loopEnabled, setLoopEnabled] = useState(false);
     const [scriptSyncEnabled, setScriptSyncEnabled] = useState(true);
+    const [playerLaunchContext, setPlayerLaunchContext] = useState(null);
     const playbackTimeRef = useRef(0);
     const durationSecRef = useRef(0);
     const lastPersistMsRef = useRef(0);
@@ -323,8 +324,34 @@ function VideoPlayer({ onBack }) {
         window.electronAPI?.emitDeviceSyncEvent?.({ eventName: 'mpv-handy-stop', detail });
     };
 
+    useEffect(() => {
+        let cancelled = false;
+        const hasQueueInRouteState = Array.isArray(location?.state?.queueVideos) && location.state.queueVideos.length > 0;
+        if (hasQueueInRouteState) {
+            setPlayerLaunchContext(null);
+            return () => { cancelled = true; };
+        }
+        const getter = window?.electronAPI?.getPlayerLaunchContext;
+        if (typeof getter !== 'function') return () => { cancelled = true; };
+        getter({ videoId: String(id || '') })
+            .then((ctx) => {
+                if (cancelled) return;
+                if (ctx && Array.isArray(ctx.queueVideos) && ctx.queueVideos.length > 0) {
+                    setPlayerLaunchContext(ctx);
+                } else {
+                    setPlayerLaunchContext(null);
+                }
+            })
+            .catch(() => {
+                if (!cancelled) setPlayerLaunchContext(null);
+            });
+        return () => { cancelled = true; };
+    }, [id, location?.state]);
+
     const queueState = useMemo(() => {
-        const raw = Array.isArray(location?.state?.queueVideos) ? location.state.queueVideos : [];
+        const raw = Array.isArray(location?.state?.queueVideos)
+            ? location.state.queueVideos
+            : (Array.isArray(playerLaunchContext?.queueVideos) ? playerLaunchContext.queueVideos : []);
         if (!raw.length) return [];
         return raw
             .map((entry) => ({
@@ -338,7 +365,7 @@ function VideoPlayer({ onBack }) {
                 vrStereoMode: String(entry?.vrStereoMode || 'mono'),
             }))
             .filter((entry) => !!entry.id && !!entry.filePath);
-    }, [location?.state]);
+    }, [location?.state, playerLaunchContext]);
 
     const queueMetaById = useMemo(() => {
         const map = new Map();

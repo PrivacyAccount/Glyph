@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, nativeImage, session } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
@@ -90,6 +90,7 @@ let mpvHostWindow = null;
 let playerWindow = null;
 let rendererBaseUrl = '';
 let mpvClientWindow = null;
+let playerLaunchContext = null;
 
 function restoreMainWindowAfterPlayback() {
     // No playback side-overlay mode anymore; keep this as safe no-op hook.
@@ -500,6 +501,32 @@ function createWindow() {
         }
     }
 
+    // Enable Web Serial API for T-Code devices (OSR2, SR6, etc.)
+    const ses = mainWindow.webContents.session;
+
+    // Allow serial permission checks
+    ses.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) => {
+        if (permission === 'serial') return true;
+        return true;
+    });
+
+    // Grant serial device access
+    ses.setDevicePermissionHandler((details) => {
+        if (details.deviceType === 'serial') return true;
+        return true;
+    });
+
+    ses.on('select-serial-port', (event, portList, webContents, callback) => {
+        event.preventDefault();
+        if (portList && portList.length > 0) {
+            callback(portList[0].portId);
+        } else {
+            callback('');
+        }
+    });
+    ses.on('serial-port-added', () => {});
+    ses.on('serial-port-removed', () => {});
+
     let rendererReadySignal = false;
     const onRendererReady = (event) => {
         if (!mainWindow || mainWindow.isDestroyed()) return;
@@ -893,6 +920,12 @@ ipcMain.handle('open-player-window', async (_event, payload = {}) => {
         const videoId = String(payload?.videoId || '').trim();
         if (!videoId) return { ok: false, error: 'Missing video id' };
         const startSeconds = Number(payload?.startSeconds || 0);
+        const queueVideos = Array.isArray(payload?.queueVideos) ? payload.queueVideos : null;
+        playerLaunchContext = {
+            videoId,
+            startSeconds: Number.isFinite(startSeconds) && startSeconds > 0 ? Math.max(1, Math.floor(startSeconds)) : 0,
+            queueVideos,
+        };
         const qs = new URLSearchParams();
         if (Number.isFinite(startSeconds) && startSeconds > 0) {
             qs.set('t', String(Math.max(1, Math.floor(startSeconds))));
@@ -907,6 +940,17 @@ ipcMain.handle('open-player-window', async (_event, payload = {}) => {
         return { ok: true };
     } catch (err) {
         return { ok: false, error: err?.message || String(err) };
+    }
+});
+
+ipcMain.handle('get-player-launch-context', async (_event, payload = {}) => {
+    try {
+        const requestedVideoId = String(payload?.videoId || '').trim();
+        if (!playerLaunchContext) return null;
+        if (requestedVideoId && String(playerLaunchContext.videoId || '') !== requestedVideoId) return null;
+        return playerLaunchContext;
+    } catch {
+        return null;
     }
 });
 
