@@ -6222,6 +6222,14 @@ async function buildHeresphereVideoDataPayload(video, baseUrl, token) {
     const isFavorite = getVideoIsFavorite(video, folderMeta);
     const tags = getVideoTagDtos(video);
 
+    // Build scripts array for HereSphere haptic support
+    const scripts = [];
+    if (video?.hasFunscript) {
+        const scriptTokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
+        const mainScriptUrl = `${baseUrl}/heresphere/script/${encodeURIComponent(String(video?.id || ''))}${scriptTokenParam}`;
+        scripts.push({ name: 'Default', url: mainScriptUrl });
+    }
+
     return {
         access: 1,
         title: String(video?.title || path.basename(video?.filePath || '') || 'Untitled'),
@@ -6235,6 +6243,7 @@ async function buildHeresphereVideoDataPayload(video, baseUrl, token) {
         projection,
         stereo,
         tags,
+        scripts: scripts.length > 0 ? scripts : undefined,
         media: [
             {
                 name: 'Direct',
@@ -6528,6 +6537,47 @@ app.get('/heresphere/stream/:id', (req, res) => {
         return res.status(404).json({ error: 'Video not found' });
     }
     return streamVideoFile(video, req, res);
+});
+
+// Serve raw funscript files for HereSphere haptic playback
+app.get('/heresphere/script/:id', (req, res) => {
+    if (!isAuthorizedForHeresphere(req)) return heresphereUnauthorized(res);
+    const id = String(req.params.id || '').trim();
+    const video = videoIndex[id];
+    if (!video) return res.status(404).json({ error: 'Video not found' });
+    if (!video.hasFunscript) return res.status(404).json({ error: 'No funscript available' });
+
+    try {
+        const scriptPath = getPrimaryScriptPathForVideo(video);
+        if (!scriptPath || !fs.existsSync(scriptPath)) {
+            return res.status(404).json({ error: 'Funscript file not found' });
+        }
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Content-Disposition', `inline; filename="${path.basename(scriptPath)}"`);
+        return fs.createReadStream(scriptPath).pipe(res);
+    } catch (err) {
+        console.error('[HereSphere] Error serving funscript:', err.message);
+        return res.status(500).json({ error: 'Failed to read funscript' });
+    }
+});
+app.get('/api/heresphere/script/:id', (req, res) => {
+    if (!isAuthorizedForHeresphere(req)) return heresphereUnauthorized(res);
+    const id = String(req.params.id || '').trim();
+    const video = videoIndex[id];
+    if (!video) return res.status(404).json({ error: 'Video not found' });
+    if (!video.hasFunscript) return res.status(404).json({ error: 'No funscript available' });
+    try {
+        const scriptPath = getPrimaryScriptPathForVideo(video);
+        if (!scriptPath || !fs.existsSync(scriptPath)) {
+            return res.status(404).json({ error: 'Funscript file not found' });
+        }
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Content-Disposition', `inline; filename="${path.basename(scriptPath)}"`);
+        return fs.createReadStream(scriptPath).pipe(res);
+    } catch (err) {
+        console.error('[HereSphere] Error serving funscript:', err.message);
+        return res.status(500).json({ error: 'Failed to read funscript' });
+    }
 });
 
 async function handleHeresphereThumbnail(req, res) {
