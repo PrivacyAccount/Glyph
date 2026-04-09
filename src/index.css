@@ -434,3 +434,8 @@ textarea {
   overflow: hidden;
   background: var(--bg-primary);
 }
+
+.app--playing,
+.app--playing .app-body {
+  background: #000;
+}

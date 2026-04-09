@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getSystemFonts: () => ipcRenderer.invoke('get-system-fonts'),
     installSystemFont: () => ipcRenderer.invoke('install-system-font'),
     setTitlebarTheme: (theme) => ipcRenderer.invoke('set-titlebar-theme', theme),
+    setServerAddress: (address) => ipcRenderer.invoke('set-server-address', address),
     rendererReady: () => ipcRenderer.send('renderer-ready'),
     emitDeviceSyncEvent: (payload) => ipcRenderer.send('relay-device-sync-event', payload),
     onDeviceSyncEvent: (callback) => {

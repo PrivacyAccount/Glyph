@@ -91,6 +91,33 @@ let playerWindow = null;
 let rendererBaseUrl = '';
 let mpvClientWindow = null;
 let playerLaunchContext = null;
+let playerWindowCurrentVideoId = null;
+let mpvLoadingFile = false;
+let currentApiBase = 'http://localhost:4000';
+
+function getServerAddressPath() {
+    return path.join(app.getPath('userData'), 'server-address.json');
+}
+
+function loadServerAddress() {
+    try {
+        const data = JSON.parse(fs.readFileSync(getServerAddressPath(), 'utf8'));
+        if (typeof data.address === 'string' && data.address.trim()) {
+            return data.address.trim();
+        }
+    } catch { }
+    return 'localhost:4000';
+}
+
+function saveServerAddress(address) {
+    try {
+        fs.writeFileSync(getServerAddressPath(), JSON.stringify({ address }), 'utf8');
+    } catch (err) {
+        console.error('Failed to save server address:', err);
+    }
+}
+let mpvSessionId = 0;
+let suppressNextMpvStopUntil = 0;
 
 function restoreMainWindowAfterPlayback() {
     // No playback side-overlay mode anymore; keep this as safe no-op hook.
@@ -215,6 +242,7 @@ const SPLASH_TEXT = {
         connectingExternalServer: 'Verbinde mit externem Server...',
         waitingServer: 'Warte auf Server-Antwort...',
         serverUnavailableExit: 'Server nicht erreichbar. Client wird beendet...',
+        serverUnavailableOpenSettings: 'Server nicht erreichbar. Öffne Einstellungen...',
         checkingLibrary: 'Prüfe Bibliothek...',
         scanningLibrary: (s) => `Scanne Bibliothek... ${s}s`,
         loadingUi: 'Lade Oberfläche...',
@@ -230,6 +258,7 @@ const SPLASH_TEXT = {
         connectingExternalServer: 'Connecting to external server...',
         waitingServer: 'Waiting for server response...',
         serverUnavailableExit: 'Server unreachable. Closing client...',
+        serverUnavailableOpenSettings: 'Server unreachable. Opening settings...',
         checkingLibrary: 'Checking library...',
         scanningLibrary: (s) => `Scanning library... ${s}s`,
         loadingUi: 'Loading interface...',
@@ -245,6 +274,7 @@ const SPLASH_TEXT = {
         connectingExternalServer: 'Conectando con servidor externo...',
         waitingServer: 'Esperando respuesta del servidor...',
         serverUnavailableExit: 'Servidor no disponible. Cerrando cliente...',
+        serverUnavailableOpenSettings: 'Servidor no disponible. Abriendo ajustes...',
         checkingLibrary: 'Comprobando biblioteca...',
         scanningLibrary: (s) => `Escaneando biblioteca... ${s}s`,
         loadingUi: 'Cargando interfaz...',
@@ -260,6 +290,7 @@ const SPLASH_TEXT = {
         connectingExternalServer: '外部サーバーに接続中...',
         waitingServer: 'サーバー応答を待機中...',
         serverUnavailableExit: 'サーバーに接続できません。クライアントを終了します...',
+        serverUnavailableOpenSettings: 'サーバーに接続できません。設定を開きます...',
         checkingLibrary: 'ライブラリを確認中...',
         scanningLibrary: (s) => `ライブラリをスキャン中... ${s}s`,
         loadingUi: 'UIを読み込み中...',
@@ -275,6 +306,7 @@ const SPLASH_TEXT = {
         connectingExternalServer: 'Подключение к внешнему серверу...',
         waitingServer: 'Ожидание ответа сервера...',
         serverUnavailableExit: 'Сервер недоступен. Клиент закрывается...',
+        serverUnavailableOpenSettings: 'Сервер недоступен. Открытие настроек...',
         checkingLibrary: 'Проверка библиотеки...',
         scanningLibrary: (s) => `Сканирование библиотеки... ${s}с`,
         loadingUi: 'Загрузка интерфейса...',
@@ -290,6 +322,7 @@ const SPLASH_TEXT = {
         connectingExternalServer: '외부 서버에 연결 중...',
         waitingServer: '서버 응답 대기 중...',
         serverUnavailableExit: '서버에 연결할 수 없습니다. 클라이언트를 종료합니다...',
+        serverUnavailableOpenSettings: '서버에 연결할 수 없습니다. 설정을 엽니다...',
         checkingLibrary: '라이브러리 확인 중...',
         scanningLibrary: (s) => `라이브러리 스캔 중... ${s}초`,
         loadingUi: '인터페이스 로딩 중...',
@@ -465,8 +498,9 @@ function createWindow() {
     const isDev = process.argv.includes('--dev') || !app.isPackaged;
     const startUrl = isDev ? 'http://localhost:5173' : `file://${path.join(__dirname, '..', 'dist', 'index.html')}`;
     rendererBaseUrl = startUrl;
-    const apiBase = 'http://localhost:4000';
-    const apiPrefix = `${apiBase}/api/`;
+    const savedAddr = loadServerAddress();
+    currentApiBase = `http://${savedAddr}`;
+    const apiPrefix = `${currentApiBase}/api/`;
 
     // In packaged mode we load file:// UI, so "/api/..." would otherwise resolve to file:///api/...
     // Redirect those requests to the external Glyph Server.
@@ -489,7 +523,7 @@ function createWindow() {
                             normalizedPath = `/api${p.startsWith('/') ? p : `/${p}`}`;
                         }
                         if (normalizedPath) {
-                            callback({ redirectURL: `${apiBase}${normalizedPath}${parsed.search || ''}` });
+                            callback({ redirectURL: `${currentApiBase}${normalizedPath}${parsed.search || ''}` });
                             return;
                         }
                     }
@@ -599,17 +633,22 @@ function createWindow() {
             let ready = false;
             let retries = 0;
             while (!ready && retries < maxRetries) {
+                updateStatus(`${splashText.waitingServer} (${retries + 1}/${maxRetries})`);
                 await new Promise(resolve => {
-                    const req = http.get(`${apiPrefix}settings`, (res) => {
-                        if (res.statusCode === 200) ready = true;
+                    try {
+                        const req = http.get(`${apiPrefix}settings`, (res) => {
+                            if (res.statusCode === 200) ready = true;
+                            resolve();
+                        });
+                        req.on('error', () => resolve());
+                        req.setTimeout(1500, () => {
+                            try { req.destroy(); } catch { }
+                            resolve();
+                        });
+                        req.end();
+                    } catch {
                         resolve();
-                    });
-                    req.on('error', () => resolve());
-                    req.setTimeout(1500, () => {
-                        try { req.destroy(); } catch { }
-                        resolve();
-                    });
-                    req.end();
+                    }
                 });
                 if (!ready) {
                     await new Promise(r => setTimeout(r, delayMs));
@@ -620,13 +659,13 @@ function createWindow() {
         };
 
         updateStatus(splashText.waitingServer);
-        let serverReady = await waitForServer(20, 500);
+        const isCustomAddress = savedAddr !== 'localhost:4000';
+        let serverReady = await waitForServer(isCustomAddress ? 6 : 20, 500);
 
-                if (!serverReady) {
-            updateStatus(splashText.serverUnavailableExit);
-            await new Promise(r => setTimeout(r, 2600));
-            app.quit();
-            return;
+        if (!serverReady) {
+            // Don't quit — proceed to main window so user can fix address in Settings
+            updateStatus(splashText.serverUnavailableOpenSettings);
+            await new Promise(r => setTimeout(r, 2000));
         }
 
 
@@ -797,10 +836,10 @@ function ensurePlayerWindow() {
     if (glyphWindowIcon && process.platform === 'win32') {
         try { playerWindow.setIcon(glyphWindowIcon); } catch { }
     }
-    playerWindow.once('ready-to-show', () => {
-        if (playerWindow && !playerWindow.isDestroyed()) playerWindow.show();
+    playerWindow.on('closed', () => {
+        playerWindow = null;
+        playerWindowCurrentVideoId = null;
     });
-    playerWindow.on('closed', () => { playerWindow = null; });
     return playerWindow;
 }
 
@@ -877,6 +916,13 @@ ipcMain.handle('set-titlebar-theme', async (_event, mode) => {
     }
 });
 
+ipcMain.handle('set-server-address', async (_event, address) => {
+    const addr = String(address || '').trim() || 'localhost:4000';
+    saveServerAddress(addr);
+    currentApiBase = `http://${addr}`;
+    return { ok: true, address: addr };
+});
+
 ipcMain.handle('open-external-url', async (_event, rawUrl) => {
     try {
         const text = String(rawUrl || '').trim();
@@ -921,6 +967,15 @@ ipcMain.handle('open-player-window', async (_event, payload = {}) => {
         if (!videoId) return { ok: false, error: 'Missing video id' };
         const startSeconds = Number(payload?.startSeconds || 0);
         const queueVideos = Array.isArray(payload?.queueVideos) ? payload.queueVideos : null;
+
+        // Guard: clicking an already-open video should not reload the player route,
+        // because that can leave a blank player shell in separate-window mode.
+        if (playerWindow && !playerWindow.isDestroyed() && playerWindowCurrentVideoId === videoId) {
+            // Keep hidden renderer hidden; playback is already running in MPV.
+            try { playerWindow.hide(); } catch { }
+            return { ok: true, reused: true };
+        }
+
         playerLaunchContext = {
             videoId,
             startSeconds: Number.isFinite(startSeconds) && startSeconds > 0 ? Math.max(1, Math.floor(startSeconds)) : 0,
@@ -933,10 +988,15 @@ ipcMain.handle('open-player-window', async (_event, payload = {}) => {
         qs.set('playerWindow', '1');
         const win = ensurePlayerWindow();
         const targetUrl = `${rendererBaseUrl}#/play/${encodeURIComponent(videoId)}?${qs.toString()}`;
+        // Route change inside the same player window unmounts old VideoPlayer,
+        // which sends mpvStop. Ignore that stale stop briefly so it can't kill
+        // the freshly started mpv session for the next video.
+        suppressNextMpvStopUntil = Date.now() + 4000;
         await win.loadURL(targetUrl);
-        if (win.isMinimized()) win.restore();
-        win.show();
-        win.focus();
+        playerWindowCurrentVideoId = videoId;
+        // Keep the player renderer hidden in separate-window mode.
+        // The visible playback surface should be only the MPV window.
+        try { win.hide(); } catch { }
         return { ok: true };
     } catch (err) {
         return { ok: false, error: err?.message || String(err) };
@@ -1073,28 +1133,38 @@ ipcMain.handle('mpv-load-file', async (event, filePath, options = {}) => {
         const callerWindow = BrowserWindow.fromWebContents(event.sender) || mainWindow;
         if (!callerWindow || callerWindow.isDestroyed()) return { ok: false, error: 'No window' };
         mpvClientWindow = callerWindow;
+        mpvLoadingFile = true;
+        mpvSessionId++;
 
-        if (callerWindow && !callerWindow.isDestroyed()) {
-            callerWindow.hide();
+        // Keep only the real MPV surface visible while playback is active.
+        // - in-app mode: hide main renderer window
+        // - separate-window mode: hide player shell window
+        const isSeparateCaller = !!(playerWindow && !playerWindow.isDestroyed() && callerWindow === playerWindow);
+        if (callerWindow === mainWindow || isSeparateCaller) {
+            try { callerWindow.hide(); } catch { }
+        }
+
+        // Dann alte MPV-Instanz zerstören
+        if (mpv.isRunning()) {
+            const prevCallback = mpv.eventCallback;
+            mpv.eventCallback = null; // suppress eof from old process
+            await mpv.destroy();
+            destroyMpvHostWindow();
+            mpv.eventCallback = prevCallback;
         }
 
         await mpv.start(callerWindow, filePath, options);
+        mpvLoadingFile = false;
 
         // Forward mpv events to renderer
         mpv.onEvent((data) => {
             if (mpvClientWindow && !mpvClientWindow.isDestroyed()) {
                 mpvClientWindow.webContents.send('mpv-event', data);
             }
-            if (data?.event === 'eof') {
-                if (mpvClientWindow && !mpvClientWindow.isDestroyed()) {
-                    restoreMainWindowAfterPlayback();
-                    mpvClientWindow.show();
-                    mpvClientWindow.focus();
-                }
-            }
         });
         return { ok: true };
     } catch (err) {
+        mpvLoadingFile = false;
         console.error('[mpv] Load file error:', err);
         if (mpvClientWindow && !mpvClientWindow.isDestroyed()) {
             restoreMainWindowAfterPlayback();
@@ -1192,23 +1262,32 @@ ipcMain.handle('mpv-set-subtitle-track', async (_event, id) => {
 });
 
 ipcMain.handle('mpv-stop', async () => {
+    if (Date.now() < suppressNextMpvStopUntil) {
+        return { ok: true, skipped: 'suppressed-stale-stop' };
+    }
+    const sessionAtStop = mpvSessionId;
     try {
         await mpv.destroy();
         destroyMpvHostWindow();
-        const targetWindow = (mpvClientWindow && !mpvClientWindow.isDestroyed()) ? mpvClientWindow : mainWindow;
-        if (targetWindow && !targetWindow.isDestroyed()) {
-            restoreMainWindowAfterPlayback();
-            targetWindow.show();
-            targetWindow.focus();
+        // Nur Fenster zeigen wenn kein neuer Load gestartet wurde
+        if (!mpvLoadingFile && sessionAtStop === mpvSessionId) {
+            const targetWindow = (mpvClientWindow && !mpvClientWindow.isDestroyed()) ? mpvClientWindow : mainWindow;
+            if (targetWindow && !targetWindow.isDestroyed()) {
+                restoreMainWindowAfterPlayback();
+                targetWindow.show();
+                targetWindow.focus();
+            }
         }
         return { ok: true };
     } catch (err) {
         destroyMpvHostWindow();
-        const targetWindow = (mpvClientWindow && !mpvClientWindow.isDestroyed()) ? mpvClientWindow : mainWindow;
-        if (targetWindow && !targetWindow.isDestroyed()) {
-            restoreMainWindowAfterPlayback();
-            targetWindow.show();
-            targetWindow.focus();
+        if (!mpvLoadingFile && sessionAtStop === mpvSessionId) {
+            const targetWindow = (mpvClientWindow && !mpvClientWindow.isDestroyed()) ? mpvClientWindow : mainWindow;
+            if (targetWindow && !targetWindow.isDestroyed()) {
+                restoreMainWindowAfterPlayback();
+                targetWindow.show();
+                targetWindow.focus();
+            }
         }
         return { ok: false, error: err.message };
     }
@@ -1218,10 +1297,3 @@ ipcMain.handle('mpv-stop', async () => {
 app.on('before-quit', async () => {
     try { await mpv.destroy(); } catch { }
 });
-
-
-
-
-
-
-

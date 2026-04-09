@@ -1061,9 +1061,9 @@
 .tcode-cell-range input[type="number"],
 .tcode-cell-speed input[type="number"] {
     width: 38px;
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 4px;
+    background: var(--bg-tertiary, rgba(255, 255, 255, 0.06));
+    border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.1));
+    border-radius: var(--radius-sm);
     color: var(--text-primary, #f0f0f5);
     padding: 2px 3px;
     font-size: 0.72rem;
@@ -1089,6 +1089,91 @@
     margin-left: 2px;
 }
 
+/* ── Motion provider column ────────────────── */
+
+.tcode-cell-motion {
+    padding: 0 2px;
+}
+
+.tcode-select-mini {
+    background: var(--bg-tertiary, #1e2130);
+    color: var(--text-primary, #e0e0e0);
+    border: 1px solid var(--border-subtle, var(--border-color, #333));
+    border-radius: var(--radius-sm);
+    padding: 2px 4px;
+    font-size: 0.7rem;
+    cursor: pointer;
+    outline: none;
+    min-width: 60px;
+}
+
+.tcode-select-mini:focus {
+    border-color: var(--accent-color, #7c5cbf);
+}
+
+.tcode-select-mini option {
+    background: var(--bg-tertiary, #1e2130);
+    color: var(--text-primary, #e0e0e0);
+}
+
+.tcode-row-provider {
+    opacity: 0.9;
+}
+
+.tcode-axis-dot.provider {
+    background: #43a5f5;
+    box-shadow: 0 0 4px #43a5f544;
+}
+
+/* ── Expanded settings row ─────────────────── */
+
+.tcode-row-expanded td {
+    padding: 0 !important;
+    border-top: none !important;
+}
+
+.tcode-expanded-settings {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 6px 8px 8px 28px;
+    background: var(--bg-tertiary, #181c28);
+    border-bottom: 1px solid var(--border-color, #2a2e3e);
+}
+
+.tcode-mini-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.72rem;
+    color: var(--text-secondary, #aaa);
+    white-space: nowrap;
+}
+
+.tcode-mini-label input[type="range"] {
+    width: 80px;
+    height: 4px;
+    accent-color: var(--accent-color, #7c5cbf);
+    cursor: pointer;
+}
+
+.tcode-mini-value {
+    color: var(--text-primary, #ccc);
+    font-size: 0.7rem;
+    min-width: 20px;
+    text-align: right;
+}
+
+.tcode-mini-check {
+    cursor: pointer;
+    user-select: none;
+}
+
+.tcode-mini-check input[type="checkbox"] {
+    accent-color: var(--accent-color, #7c5cbf);
+    cursor: pointer;
+}
+
 /* ── TCode Settings ────────────────────────────────────────────────── */
 
 .tcode-settings-row {
@@ -1112,6 +1197,37 @@
     white-space: nowrap;
 }
 
+.tcode-smoothing-select {
+    min-width: 168px;
+}
+
+.tcode-smoothing-select .app-dropdown-trigger {
+    min-height: 32px;
+    padding: 6px 28px 6px 10px;
+    border-radius: var(--radius-sm);
+    background: var(--bg-tertiary, rgba(255, 255, 255, 0.06));
+    border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.12));
+}
+
+.tcode-smoothing-select.open:not(.upward) .app-dropdown-trigger {
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+}
+
+.tcode-smoothing-select.open.upward .app-dropdown-trigger {
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+}
+
+.tcode-smoothing-menu.portal {
+    margin-top: -1px;
+}
+
+.tcode-smoothing-menu.portal.upward {
+    margin-top: 0;
+    margin-bottom: -1px;
+}
+
 .tcode-toggle-btn {
     display: inline-flex;
     align-items: center;
@@ -1119,7 +1235,7 @@
     width: 34px;
     height: 34px;
     padding: 0;
-    border-radius: 8px;
+    border-radius: var(--radius-md);
     border: 1px solid rgba(255, 255, 255, 0.1);
     background: rgba(255, 255, 255, 0.04);
     color: var(--text-secondary, #888);
@@ -1131,16 +1247,21 @@
 .tcode-toggle-btn:hover {
     background: rgba(255, 255, 255, 0.08);
     border-color: rgba(255, 255, 255, 0.18);
+    color: var(--text-primary, #eee);
+}
+
+.tcode-toggle-btn:active {
+    transform: scale(0.95);
 }
 
 .tcode-toggle-btn.active {
-    background: rgba(99, 102, 241, 0.15);
-    border-color: rgba(99, 102, 241, 0.4);
-    color: #a5b4fc;
+    background: color-mix(in srgb, var(--accent-primary, #a855f7) 15%, transparent);
+    border-color: color-mix(in srgb, var(--accent-primary, #a855f7) 40%, transparent);
+    color: var(--accent-primary, #a855f7);
 }
 
 .tcode-toggle-btn.active:hover {
-    background: rgba(99, 102, 241, 0.22);
+    background: color-mix(in srgb, var(--accent-primary, #a855f7) 22%, transparent);
 }
 
 .tcode-toggle-btn svg {
@@ -1166,9 +1287,9 @@
 }
 
 .tcode-select {
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 6px;
+    background: var(--bg-tertiary, rgba(255, 255, 255, 0.06));
+    border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.12));
+    border-radius: var(--radius-sm);
     color: var(--text-primary, #f0f0f5);
     padding: 5px 10px;
     font-size: 0.78rem;
@@ -1218,6 +1339,7 @@
 :root[data-theme-mode="modern"] .tcode-select {
     background: linear-gradient(180deg, rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0.5));
     border-color: var(--glass-border, rgba(255, 255, 255, 0.62));
+    border-radius: var(--radius-sm);
     color: #1d2a38;
     box-shadow: 0 2px 6px rgba(16, 24, 40, 0.06);
     backdrop-filter: blur(8px);
@@ -1225,6 +1347,10 @@
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%234a5568'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: right 8px center;
+}
+
+:root[data-theme-mode="modern"] .tcode-smoothing-select .app-dropdown-trigger {
+    border-radius: var(--radius-sm);
 }
 
 :root[data-theme-mode="modern"] .tcode-select:focus {
@@ -1241,16 +1367,18 @@
     background: rgba(255, 255, 255, 0.5);
     border-color: rgba(153, 166, 184, 0.3);
     color: #6b7a8e;
+    border-radius: var(--radius-md);
 }
 
 :root[data-theme-mode="modern"] .tcode-toggle-btn:hover {
     background: rgba(255, 255, 255, 0.7);
+    color: var(--text-primary);
 }
 
 :root[data-theme-mode="modern"] .tcode-toggle-btn.active {
-    background: rgba(99, 102, 241, 0.1);
-    border-color: rgba(99, 102, 241, 0.35);
-    color: #6366f1;
+    background: color-mix(in srgb, var(--accent-primary) 12%, white);
+    border-color: color-mix(in srgb, var(--accent-primary) 35%, transparent);
+    color: var(--accent-primary);
 }
 
 :root[data-theme-mode="modern"] .tcode-cell-range input[type="number"],
@@ -1258,9 +1386,36 @@
     background: rgba(255, 255, 255, 0.7);
     border-color: rgba(153, 166, 184, 0.4);
     color: #1d2a38;
+    border-radius: var(--radius-sm);
 }
 
 :root[data-theme-mode="modern"] .tcode-cell-range input[type="number"]:focus,
 :root[data-theme-mode="modern"] .tcode-cell-speed input[type="number"]:focus {
     border-color: #6366f1;
+}
+
+:root[data-theme-mode="modern"] .tcode-select-mini {
+    background: rgba(255, 255, 255, 0.65);
+    border-color: rgba(153, 166, 184, 0.4);
+    color: #1d2a38;
+    border-radius: var(--radius-sm);
+}
+
+:root[data-theme-mode="modern"] .tcode-select-mini:focus {
+    border-color: #6366f1;
+}
+
+:root[data-theme-mode="modern"] .tcode-select-mini option {
+    background: #f0f2f5;
+    color: #1d2a38;
+}
+
+:root[data-theme-mode="modern"] .tcode-expanded-settings {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: rgba(153, 166, 184, 0.2);
+}
+
+:root[data-theme-mode="modern"] .tcode-axis-dot.provider {
+    background: #6366f1;
+    box-shadow: 0 0 4px #6366f144;
 }

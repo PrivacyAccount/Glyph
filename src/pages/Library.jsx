@@ -107,6 +107,7 @@ function Library({ library, onLibraryUpdate, onBack, onPlay, onSeriesSelect, onO
     const [videoTab, setVideoTab] = useState(() => (
         library?.initialVideoTab || (library?.type === 'series' ? 'folders' : 'all')
     )); // 'all' | 'folders'
+    const [folderBrowserVideos, setFolderBrowserVideos] = useState([]);
 
     const isSeriesLib = library?.type === 'series';
     const isVrLib = library?.type === 'vr';
@@ -691,6 +692,30 @@ function Library({ library, onLibraryUpdate, onBack, onPlay, onSeriesSelect, onO
         baseVideosForDynamicTagCounts,
         tagsMatchBySelection,
     ]);
+
+    const folderBrowserTagStats = useMemo(() => {
+        if (videoTab !== 'folders' || folderBrowserVideos.length === 0) return null;
+        const tagNames = new Set();
+        for (const v of folderBrowserVideos) {
+            for (const tag of (v.tags || [])) tagNames.add(String(tag));
+        }
+        // Also include tags from the global universe so sidebar stays consistent
+        for (const t of sidebarVideoTagStats) tagNames.add(t.name);
+        const selected = Array.isArray(selectedTagFilters) ? selectedTagFilters : [];
+        const mode = (tagFilterMode || 'or') === 'and' ? 'and' : 'or';
+        return [...tagNames].sort((a, b) => a.localeCompare(b)).map(name => {
+            const selectedAlready = selected.some(s => String(s).toLowerCase() === name.toLowerCase());
+            const simulated = selectedAlready ? selected : [...selected, name];
+            const count = folderBrowserVideos.reduce((acc, v) => (
+                tagsMatchBySelection(v?.tags || [], simulated, mode) ? acc + 1 : acc
+            ), 0);
+            return {
+                name,
+                count,
+                category: String(tagCategoryMap?.[name.toLowerCase()]?.category || ''),
+            };
+        });
+    }, [videoTab, folderBrowserVideos, sidebarVideoTagStats, tagCategoryMap, selectedTagFilters, tagFilterMode, tagsMatchBySelection]);
 
     const availableFolderTagStats = useMemo(() => {
         const map = new Map();
@@ -1861,7 +1886,7 @@ function Library({ library, onLibraryUpdate, onBack, onPlay, onSeriesSelect, onO
                         filters={filters}
                         onFilterChange={setFilters}
                         extensions={extensions}
-                        tags={sidebarVideoTagStats}
+                        tags={folderBrowserTagStats || sidebarVideoTagStats}
                         selectedTagFilters={selectedTagFilters}
                         onTagFilterToggle={toggleTagFilter}
                         onTagFilterClear={clearTagFilters}
@@ -2096,7 +2121,9 @@ function Library({ library, onLibraryUpdate, onBack, onPlay, onSeriesSelect, onO
                                             {Array.isArray(folder.tags) && folder.tags.length > 0 && (
                                                 <div className="item-tag-row">
                                                     {folder.tags.slice(0, 3).map(tag => (
-                                                        <span key={tag} className="item-tag">{tag}</span>
+                                                        <span key={tag} className="item-tag item-tag-clickable"
+                                                            onClick={(e) => { e.stopPropagation(); toggleTagFilter(tag); }}
+                                                        >{tag}</span>
                                                     ))}
                                                 </div>
                                             )}
@@ -2131,6 +2158,7 @@ function Library({ library, onLibraryUpdate, onBack, onPlay, onSeriesSelect, onO
                                         reserveHeatmapSpace
                                         showPerformers={showPerformerChips}
                                         onPerformerClick={handlePerformerChipClick}
+                                        onTagClick={toggleTagFilter}
                                     />
                                 ))}
                             </div>
@@ -2147,6 +2175,8 @@ function Library({ library, onLibraryUpdate, onBack, onPlay, onSeriesSelect, onO
                                     filters={filters}
                                     selectedTagFilters={selectedTagFilters}
                                     tagFilterMode={tagFilterMode}
+                                    onTagClick={toggleTagFilter}
+                                    onVideosChange={setFolderBrowserVideos}
                                 />
                             </FileBrowserBoundary>
                         )}
@@ -2277,6 +2307,7 @@ function Library({ library, onLibraryUpdate, onBack, onPlay, onSeriesSelect, onO
                                                         reserveHeatmapSpace
                                                         showPerformers={showPerformerChips}
                                                         onPerformerClick={handlePerformerChipClick}
+                                                        onTagClick={toggleTagFilter}
                                                     />
                                                 ))}
                                             </div>

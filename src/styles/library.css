@@ -3937,6 +3937,17 @@
   color: var(--text-secondary);
 }
 
+.item-tag-clickable {
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.item-tag-clickable:hover {
+  background: rgba(168, 85, 247, 0.12);
+  border-color: var(--accent-primary, #a855f7);
+  color: var(--text-primary);
+}
+
 .video-tag-row {
   margin-top: 8px;
 }

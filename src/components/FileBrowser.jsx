@@ -17,6 +17,8 @@ function FileBrowser({
     filters = {},
     selectedTagFilters = [],
     tagFilterMode = 'or',
+    onTagClick = null,
+    onVideosChange = null,
 }) {
     const { t } = useI18n();
     const [currentPath, setCurrentPath] = useState(library.path);
@@ -171,6 +173,10 @@ function FileBrowser({
     const allKnownTags = useMemo(() => (
         [...new Set((content?.videos || []).flatMap((v) => (v.tags || []).map((tag) => String(tag))))].sort((a, b) => a.localeCompare(b))
     ), [content?.videos]);
+
+    useEffect(() => {
+        if (onVideosChange) onVideosChange(content?.videos || []);
+    }, [content?.videos]);
 
     const selectedTagSet = useMemo(
         () => new Set((selectedTagFilters || []).map((v) => String(v).toLowerCase())),
@@ -637,6 +643,7 @@ function FileBrowser({
                                     onToggleSelect={toggleVideoSelection}
                                     viewMode="list"
                                     reserveHeatmapSpace
+                                    onTagClick={onTagClick}
                                 />
                             ))}
                         </div>
@@ -680,6 +687,7 @@ function FileBrowser({
                                     onToggleSelect={toggleVideoSelection}
                                     viewMode="grid"
                                     reserveHeatmapSpace
+                                    onTagClick={onTagClick}
                                 />
                             ))}
                         </div>

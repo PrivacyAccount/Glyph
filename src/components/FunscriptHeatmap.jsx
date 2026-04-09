@@ -10,7 +10,7 @@ import React, { useRef, useEffect } from 'react';
 function FunscriptHeatmap({ actions, width = 300, height = 6, className = '', durationMs = null, variant = 'detailed', videoId = null, cacheKey = null }) {
     const canvasRef = useRef(null);
     const normalizedId = String(videoId || '').trim();
-    const HEATMAP_RENDER_VERSION = 'v6';
+    const HEATMAP_RENDER_VERSION = 'v10';
     const cachedHeatmapUrl = normalizedId
         ? `/api/videos/${encodeURIComponent(normalizedId)}/heatmap?variant=${encodeURIComponent(String(variant || 'detailed'))}${cacheKey !== null && cacheKey !== undefined ? `&v=${encodeURIComponent(String(cacheKey))}` : ''}&rv=${encodeURIComponent(HEATMAP_RENDER_VERSION)}`
         : '';
@@ -89,7 +89,7 @@ function drawDetailedHeatmap(ctx, actions, width, height, totalDuration) {
 
     for (let i = 0; i < numColumns; i++) {
         const v = Math.max(0, Math.min(1, intensity[i] || 0));
-        if (v <= 0.015) continue;
+        if (v <= 0.005) continue;
 
         const eased = Math.pow(v, 0.9);
         const barHeight = Math.max(1, Math.round((0.06 + (eased * 0.94)) * height));
@@ -209,11 +209,15 @@ function getHeatColor(value) {
 
 function getDetailedHeatColor(value) {
     const stops = [
-        { t: 0.0, c: [26, 56, 120] },
-        { t: 0.22, c: [48, 156, 94] },
-        { t: 0.50, c: [228, 206, 66] },
-        { t: 0.78, c: [236, 142, 55] },
-        { t: 1.0, c: [228, 96, 50] },
+        { t: 0.00, c: [18, 22, 30] },
+        { t: 0.03, c: [34, 112, 238] },
+        { t: 0.14, c: [33, 174, 255] },
+        { t: 0.28, c: [49, 190, 103] },
+        { t: 0.46, c: [231, 212, 64] },
+        { t: 0.64, c: [244, 152, 53] },
+        { t: 0.82, c: [232, 70, 51] },
+        { t: 0.93, c: [218, 58, 126] },
+        { t: 1.00, c: [245, 105, 200] },
     ];
 
     const v = Math.max(0, Math.min(1, value));

@@ -7,13 +7,14 @@ import { eventMatchesHotkey, getHotkeys } from '../services/hotkeys';
 // -- Color gradient matching FunscriptHeatmap.jsx --
 function getHeatColor(value) {
     const stops = [
-        { t: 0.00, c: [34, 112, 238] }, // blue (very slow)
-        { t: 0.12, c: [33, 174, 255] }, // cyan
-        { t: 0.26, c: [49, 190, 103] }, // green
-        { t: 0.44, c: [231, 212, 64] }, // yellow
-        { t: 0.62, c: [244, 152, 53] }, // orange
-        { t: 0.80, c: [232, 70, 51] },  // red
-        { t: 0.93, c: [218, 58, 126] }, // magenta
+        { t: 0.00, c: [18, 22, 30] },   // background (no movement)
+        { t: 0.03, c: [34, 112, 238] },  // blue (very slow)
+        { t: 0.14, c: [33, 174, 255] },  // cyan
+        { t: 0.28, c: [49, 190, 103] },  // green
+        { t: 0.46, c: [231, 212, 64] },  // yellow
+        { t: 0.64, c: [244, 152, 53] },  // orange
+        { t: 0.82, c: [232, 70, 51] },   // red
+        { t: 0.93, c: [218, 58, 126] },  // magenta
         { t: 1.00, c: [245, 105, 200] }, // pink peaks
     ];
     const v = Math.max(0, Math.min(1, value));
@@ -867,9 +868,15 @@ function VideoPlayer({ onBack }) {
                 clockSetPaused(playbackTimeRef.current);
                 persistProgress(playbackTimeRef.current, true);
             }
-            window.electronAPI?.mpvStop?.().catch(() => { });
         };
     }, [id, resumeSeconds, queueState, queueIdByPath]);
+
+    // Nur beim echten Unmount (Verlassen des Players) mpvStop aufrufen
+    useEffect(() => {
+        return () => {
+            window.electronAPI?.mpvStop?.().catch(() => { });
+        };
+    }, []);
 
     useEffect(() => {
         if (loading) return undefined;
@@ -1212,7 +1219,7 @@ function VideoPlayer({ onBack }) {
     }, [loopEnabled]);
 
     return (
-        <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', background: 'transparent' }}>
+        <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', background: '#000' }}>
             {!loading && !error && (
                 <div style={{
                     position: 'fixed',

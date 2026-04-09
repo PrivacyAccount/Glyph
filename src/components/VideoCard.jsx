@@ -18,6 +18,7 @@ function VideoCard({
     viewMode = 'grid',
     showPerformers = false,
     onPerformerClick = null,
+    onTagClick = null,
 }) {
     const { t } = useI18n();
     const [videoDurationMs, setVideoDurationMs] = useState(0);
@@ -462,7 +463,9 @@ function VideoCard({
                 {Array.isArray(video.tags) && video.tags.length > 0 && (
                     <div className="item-tag-row video-tag-row">
                         {video.tags.slice(0, 3).map(tag => (
-                            <span key={tag} className="item-tag">{tag}</span>
+                            <span key={tag} className={`item-tag${onTagClick ? ' item-tag-clickable' : ''}`}
+                                onClick={onTagClick ? (e) => { e.stopPropagation(); onTagClick(tag); } : undefined}
+                            >{tag}</span>
                         ))}
                     </div>
                 )}

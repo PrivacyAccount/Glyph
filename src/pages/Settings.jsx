@@ -50,6 +50,7 @@ function Settings({ onLibraryUpdate, onThemeChange, onLanguageChange }) {
         continueWatching: true,
         showTimelineGraph: false,
         separatePlayerWindow: false,
+        serverAddress: 'localhost:4000',
         playerAutoFullscreen: false,
         thumbfastEnabled: true,
         showPerformerChips: true,
@@ -126,6 +127,7 @@ function Settings({ onLibraryUpdate, onThemeChange, onLanguageChange }) {
         { id: 'hotkeys', label: t('hotkeysTitle', 'Hotkeys') },
         { id: 'browsing', label: t('browsingTitle', 'Browsing / Vorschau') },
         { id: 'backup', label: t('storageTitle', 'Storage') },
+        { id: 'connection', label: t('connectionTitle', 'Verbindung') },
         { id: 'about', label: t('aboutTitle', 'About') },
     ]), [t]);
     const playbackSubpanels = useMemo(() => ([
@@ -309,6 +311,9 @@ function Settings({ onLibraryUpdate, onThemeChange, onLanguageChange }) {
                 separatePlayerWindow: typeof local.separatePlayerWindow === 'boolean'
                     ? local.separatePlayerWindow
                     : false,
+                serverAddress: typeof local.serverAddress === 'string' && local.serverAddress
+                    ? local.serverAddress
+                    : 'localhost:4000',
                 playerAutoFullscreen: typeof local.playerAutoFullscreen === 'boolean'
                     ? local.playerAutoFullscreen
                     : false,
@@ -323,6 +328,13 @@ function Settings({ onLibraryUpdate, onThemeChange, onLanguageChange }) {
             setSettings(merged);
         } catch (err) {
             console.error('Failed to load settings:', err);
+            // Load local-only settings (e.g. serverAddress) even when server is unreachable
+            try {
+                const local = JSON.parse(localStorage.getItem('glyph_settings') || '{}');
+                if (local.serverAddress) {
+                    setSettings(prev => ({ ...prev, serverAddress: local.serverAddress }));
+                }
+            } catch { }
             showToast(t('settingsLoadError', 'Einstellungen konnten nicht geladen werden'), 'error');
         }
     };
@@ -1416,6 +1428,7 @@ function Settings({ onLibraryUpdate, onThemeChange, onLanguageChange }) {
                             </span>
                         </label>
                                 </div>
+
                             </>
                         )}
 
@@ -2008,6 +2021,48 @@ function Settings({ onLibraryUpdate, onThemeChange, onLanguageChange }) {
             );
         }
 
+        if (activePanel === 'connection') {
+            return (
+                <div className="settings-section">
+                    <div className="settings-section-title">{t('connectionTitle', 'Verbindung')}</div>
+                    <div style={{ marginBottom: '20px', marginLeft: '14px' }}>
+                        <div style={{ fontSize: '14px', color: 'var(--text-primary)', fontWeight: 500 }}>
+                            {t('serverAddressTitle', 'Server Address')}
+                        </div>
+                        <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px', marginBottom: '8px' }}>
+                            {t('serverAddressDesc', 'IP and port of the Glyph Server to connect to. Requires restart.')}
+                        </div>
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                            <input
+                                type="text"
+                                className="add-library-name"
+                                value={settings.serverAddress ?? 'localhost:4000'}
+                                onChange={(e) => setSettings({ ...settings, serverAddress: e.target.value })}
+                                placeholder="localhost:4000"
+                                style={{ maxWidth: '280px' }}
+                            />
+                            <button
+                                className="btn btn-secondary"
+                                style={{ padding: '7px 14px', fontSize: '12px' }}
+                                onClick={() => {
+                                    const addr = (settings.serverAddress || 'localhost:4000').trim();
+                                    setSettings({ ...settings, serverAddress: addr });
+                                    const currentLocal = JSON.parse(localStorage.getItem('glyph_settings') || '{}');
+                                    localStorage.setItem('glyph_settings', JSON.stringify({ ...currentLocal, serverAddress: addr }));
+                                    if (window.electronAPI?.setServerAddress) {
+                                        window.electronAPI.setServerAddress(addr);
+                                    }
+                                    showToast(t('serverAddressSaved', 'Server address saved. Restart the app to apply.'), 'success');
+                                }}
+                            >
+                                {t('saveLabel', 'Speichern')}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
         if (activePanel === 'about') {
             return (
                 <div className="settings-section">
@@ -2063,6 +2118,7 @@ function Settings({ onLibraryUpdate, onThemeChange, onLanguageChange }) {
                             {t('aboutEroscriptsLabel', 'Open EroScripts')}
                         </button>
                     </div>
+
                 </div>
             );
         }

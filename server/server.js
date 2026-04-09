@@ -5798,60 +5798,90 @@ function buildDetailedHeatmapData(actionsInput, segmentCount = 220) {
     const actions = Array.isArray(actionsInput) ? actionsInput : [];
     if (actions.length < 2) return null;
     const total = Math.max(1, Number(actions[actions.length - 1]?.at || 0));
-    const speed = Array.from({ length: segmentCount }, () => 0);
+    const segmentDuration = total / segmentCount;
+    const movementPerSegment = new Array(segmentCount).fill(0);
+    const strokePerSegment = new Array(segmentCount).fill(0);
     const pos = Array.from({ length: segmentCount }, () => 0);
     const posCount = Array.from({ length: segmentCount }, () => 0);
-    const rawSpeeds = [];
-    for (let i = 1; i < actions.length; i += 1) {
-        const a = actions[i - 1];
-        const b = actions[i];
-        const dt = Math.max(1, Number(b?.at || 0) - Number(a?.at || 0));
+
+    for (let i = 0; i < actions.length - 1; i += 1) {
+        const a = actions[i];
+        const b = actions[i + 1];
+        const t1 = Number(a?.at || 0);
+        const t2 = Number(b?.at || 0);
+        if (t2 <= t1) continue;
+
+        const dt = t2 - t1;
         const dp = Math.abs(Number(b?.pos || 0) - Number(a?.pos || 0));
-        rawSpeeds.push((1000 * dp) / dt);
+        const avgPos = Math.max(0, Math.min(100, (Number(a?.pos || 0) + Number(b?.pos || 0)) / 2));
+
+        const firstSeg = Math.max(0, Math.floor(t1 / segmentDuration));
+        const lastSeg = Math.min(segmentCount - 1, Math.floor((t2 - 1) / segmentDuration));
+
+        for (let seg = firstSeg; seg <= lastSeg; seg += 1) {
+            const segStart = seg * segmentDuration;
+            const segEnd = segStart + segmentDuration;
+            const overlapStart = Math.max(segStart, t1);
+            const overlapEnd = Math.min(segEnd, t2);
+            const overlap = overlapEnd - overlapStart;
+            if (overlap <= 0) continue;
+
+            const overlapRatio = overlap / dt;
+            if (dp > 0) {
+                movementPerSegment[seg] += dp * overlapRatio;
+                strokePerSegment[seg] += overlapRatio;
+            }
+            pos[seg] += avgPos;
+            posCount[seg] += 1;
+        }
     }
-    const windowSize = 10;
-    const smooth = [];
-    const ring = [];
-    let sum = 0;
-    for (let i = 0; i < rawSpeeds.length; i += 1) {
-        const v = Number(rawSpeeds[i] || 0);
-        ring.push(v);
-        sum += v;
-        if (ring.length > windowSize) sum -= ring.shift();
-        smooth.push(sum / Math.max(1, ring.length));
-    }
-    for (let i = 1; i < actions.length; i += 1) {
-        const a = actions[i - 1];
-        const b = actions[i];
-        const t = Math.max(0, Math.min(total, Number(a?.at || 0)));
-        const idx = Math.max(0, Math.min(segmentCount - 1, Math.floor((t / total) * segmentCount)));
-        const s = Number(smooth[i - 1] || 0);
-        if (s > speed[idx]) speed[idx] = s;
-        const avgPos = (Number(a?.pos || 0) + Number(b?.pos || 0)) / 2;
-        pos[idx] += Math.max(0, Math.min(100, avgPos));
-        posCount[idx] += 1;
-    }
+
     for (let i = 0; i < segmentCount; i += 1) {
         pos[i] = posCount[i] > 0 ? (pos[i] / posCount[i]) : (i > 0 ? pos[i - 1] : 50);
     }
-    const sorted = speed.slice().sort((a, b) => a - b);
-    const p95Idx = Math.max(0, Math.min(sorted.length - 1, Math.floor(sorted.length * 0.992)));
-    const normMax = Math.max(0.0001, Number(sorted[p95Idx] || sorted[sorted.length - 1] || 0.0001));
-    const norm = speed.map((v) => Math.max(0, Math.min(1, v / normMax)));
+
+    const segmentSeconds = Math.max(segmentDuration / 1000, 1e-6);
+    const speed = movementPerSegment.map((m) => m / segmentSeconds);
+    const strokes = strokePerSegment.map((s) => s / segmentSeconds);
+
+    // Normalize by 95th percentile (same as client)
+    const speedN = normalizeByPercentileServer(speed, 95);
+    const strokesN = normalizeByPercentileServer(strokes, 95);
+    const norm = speedN.map((v, i) => (v * 0.65) + (strokesN[i] * 0.35));
+
     return { norm, pos, total };
+}
+
+function percentileServer(values, p) {
+    if (!values || values.length === 0) return 0;
+    const sorted = [...values].sort((a, b) => a - b);
+    const idx = (Math.max(0, Math.min(100, p)) / 100) * (sorted.length - 1);
+    const lo = Math.floor(idx);
+    const hi = Math.ceil(idx);
+    const t = idx - lo;
+    if (lo === hi) return sorted[lo];
+    return sorted[lo] + (sorted[hi] - sorted[lo]) * t;
+}
+
+function normalizeByPercentileServer(values, p = 95) {
+    const nonZero = values.filter((v) => v > 0);
+    if (nonZero.length === 0) return values.map(() => 0);
+    const scale = Math.max(percentileServer(nonZero, p), 1e-6);
+    return values.map((v) => Math.max(0, Math.min(1, v / scale)));
 }
 
 function heatColorForDetailedLevel(v) {
     const t = Math.max(0, Math.min(1, Number(v || 0)));
     const stops = [
-        { t: 0.00, c: [34, 112, 238] },  // blue (very slow)
-        { t: 0.12, c: [33, 174, 255] },  // cyan
-        { t: 0.26, c: [49, 190, 103] },  // green
-        { t: 0.44, c: [231, 212, 64] },  // yellow
-        { t: 0.62, c: [244, 152, 53] },  // orange
-        { t: 0.80, c: [232, 70, 51] },   // red
-        { t: 0.93, c: [218, 58, 126] },  // magenta (rare)
-        { t: 1.00, c: [245, 105, 200] }, // pink (very fast peaks)
+        { t: 0.00, c: [15, 23, 42] },    // background (no movement)
+        { t: 0.03, c: [34, 112, 238] },   // blue (very slow)
+        { t: 0.14, c: [33, 174, 255] },   // cyan
+        { t: 0.28, c: [49, 190, 103] },   // green
+        { t: 0.46, c: [231, 212, 64] },   // yellow
+        { t: 0.64, c: [244, 152, 53] },   // orange
+        { t: 0.82, c: [232, 70, 51] },    // red
+        { t: 0.93, c: [218, 58, 126] },   // magenta (rare)
+        { t: 1.00, c: [245, 105, 200] },  // pink (very fast peaks)
     ];
     let a = stops[0];
     let b = stops[stops.length - 1];
@@ -5995,6 +6025,7 @@ function buildDetailedHeatmapPng(data, opts = {}) {
     for (let x = 0; x < w; x += 1) {
         const t = w <= 1 ? 0 : (x / (w - 1));
         const vRaw = Math.max(0, Math.min(1, lerpSample(norm, t)));
+        if (vRaw <= 0.005) continue; // truly zero → keep dark background
         const pRaw = Math.max(0, Math.min(100, lerpSample(pos, t)));
         // Push high-end colors later so red/pink are not overrepresented.
         const eased = Math.pow(vRaw, 1.18);
@@ -6054,7 +6085,7 @@ function inferAxisFromScriptPath(scriptPath) {
 
 function getVideoHeatmapCachePath(video, scriptPath, mode = 'detailed') {
     const scriptMtime = (scriptPath && fs.existsSync(scriptPath)) ? Number(fs.statSync(scriptPath).mtimeMs || 0) : 0;
-    const key = generateStableId(`${video?.id || ''}|${video?.filePath || ''}|${scriptPath || ''}|${scriptMtime}|${mode}|v6`);
+    const key = generateStableId(`${video?.id || ''}|${video?.filePath || ''}|${scriptPath || ''}|${scriptMtime}|${mode}|v10`);
     const shortKey = key.slice(0, 10);
     const axis = makeSafeHeatmapNamePart(inferAxisFromScriptPath(scriptPath), 'main');
     const videoNameRaw = String(video?.title || path.basename(String(video?.filePath || ''), path.extname(String(video?.filePath || ''))) || 'video');
@@ -11488,6 +11519,10 @@ writeThemeCache(loadSettings().theme);
 const startServer = () => {
     const server = app.listen(PORT, () => {
         console.log(`Glyph server running on http://localhost:${PORT}`);
+        const lanIps = getNetworkIpCandidates();
+        if (lanIps.length > 0) {
+            lanIps.forEach(ip => console.log(`  Network: http://${ip}:${PORT}`));
+        }
         // Scan after server is listening so UI loads immediately
         scanAllLibraries();
     });

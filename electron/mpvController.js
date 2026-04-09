@@ -319,8 +319,9 @@ class MpvController {
 
         this.process.on('exit', (code, signal) => {
             console.log(`[mpv] Process exited (code=${code}, signal=${signal || 'none'})`);
+            const wasDestroyed = this._destroyed;
             this._cleanup();
-            if (this.eventCallback && !this._destroyed) {
+            if (this.eventCallback && !wasDestroyed) {
                 this.eventCallback({ event: 'eof', reason: 'process-exit' });
             }
         });

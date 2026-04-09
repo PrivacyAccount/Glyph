@@ -25,6 +25,7 @@ function AppContent() {
     const [isWindowMaximized, setIsWindowMaximized] = useState(false);
     const [isBootstrapping, setIsBootstrapping] = useState(true);
     const [devicePanelOpen, setDevicePanelOpen] = useState(false);
+    const [serverUnreachable, setServerUnreachable] = useState(false);
     const navigate = useNavigate();
     const location = useLocation();
     const { t, setLanguage } = useI18n();
@@ -38,6 +39,14 @@ function AppContent() {
                 loadThemeAndLanguage(),
             ]);
             if (!cancelled) setIsBootstrapping(false);
+            // Check server reachability
+            try {
+                const res = await fetch('/api/settings');
+                if (!res.ok) throw new Error('not ok');
+                if (!cancelled) setServerUnreachable(false);
+            } catch {
+                if (!cancelled) setServerUnreachable(true);
+            }
         })();
         return () => { cancelled = true; };
     }, []);
@@ -434,7 +443,7 @@ function AppContent() {
     }, [activeLibrary, libraries, isPlaying, location.pathname, navigate]);
 
     return (
-        <div className="app">
+        <div className={`app${isPlaying ? ' app--playing' : ''}`}>
             <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden="true" focusable="false">
                 <defs>
                     <filter id="glass-distortion" x="0%" y="0%" width="100%" height="100%">
@@ -563,6 +572,45 @@ function AppContent() {
                         </button>
                     </div>
                 </header>
+            )}
+
+            {/* Server unreachable banner */}
+            {serverUnreachable && !isPlaying && (
+                <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 12,
+                    padding: '8px 16px',
+                    background: 'rgba(239, 68, 68, 0.12)',
+                    borderBottom: '1px solid rgba(239, 68, 68, 0.25)',
+                    color: '#ef4444',
+                    fontSize: 13,
+                }}>
+                    <span>{t('serverUnreachable', 'Server not reachable. Check your server address in Settings.')}</span>
+                    <button
+                        className="btn btn-secondary"
+                        style={{ padding: '4px 10px', fontSize: 12 }}
+                        onClick={() => {
+                            const currentLocal = JSON.parse(localStorage.getItem('glyph_settings') || '{}');
+                            currentLocal.serverAddress = 'localhost:4000';
+                            localStorage.setItem('glyph_settings', JSON.stringify(currentLocal));
+                            if (window.electronAPI?.setServerAddress) {
+                                window.electronAPI.setServerAddress('localhost:4000');
+                            }
+                            window.location.reload();
+                        }}
+                    >
+                        {t('resetToDefault', 'Reset to localhost:4000')}
+                    </button>
+                    <button
+                        className="btn btn-secondary"
+                        style={{ padding: '4px 10px', fontSize: 12 }}
+                        onClick={() => navigate('/settings')}
+                    >
+                        {t('navSettings', 'Einstellungen')}
+                    </button>
+                </div>
             )}
 
             {/* Main Area */}

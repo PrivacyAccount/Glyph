@@ -1852,12 +1852,15 @@ function TCodeTab({ status, portInfo, syncState, onConnect, onDisconnect, t }) {
     const activeAxes = isConnected ? tcode.getActiveAxes() : [];
     const [axisPositions, setAxisPositions] = useState({});
     const [tcSettings, setTcSettings] = useState(() => tcode.getSettings());
+    const [effectiveProviders, setEffectiveProviders] = useState({});
+    const [expandedAxis, setExpandedAxis] = useState(null);
 
     // Poll axis positions at ~15Hz when connected and syncing
     useEffect(() => {
-        if (!isConnected) { setAxisPositions({}); return; }
+        if (!isConnected) { setAxisPositions({}); setEffectiveProviders({}); return; }
         const iv = setInterval(() => {
             setAxisPositions(tcode.getAxisPositions());
+            setEffectiveProviders(tcode.getEffectiveProviders());
         }, 66);
         return () => clearInterval(iv);
     }, [isConnected]);
@@ -1887,6 +1890,8 @@ function TCodeTab({ status, portInfo, syncState, onConnect, onDisconnect, t }) {
         'L0': 'Stroke', 'L1': 'Surge', 'L2': 'Sway',
         'R0': 'Twist', 'R1': 'Roll', 'R2': 'Pitch',
     };
+
+    const ALL_AXES_LIST = ['L0', 'L1', 'L2', 'R0', 'R1', 'R2'];
 
     return (
         <>
@@ -1962,7 +1967,7 @@ function TCodeTab({ status, portInfo, syncState, onConnect, onDisconnect, t }) {
         
             {/* ── TCode Settings ─────────────────────────────── */}
             <div className="handy-section">
-                <div className="handy-section-title">{t('settings', 'Einstellungen')}</div>
+                <div className="handy-section-title">{t('navSettings', 'Einstellungen')}</div>
                 <div className="tcode-settings-row">
                     <button
                         className={`tcode-toggle-btn ${tcSettings.autoHome ? 'active' : ''}`}
@@ -1982,14 +1987,22 @@ function TCodeTab({ status, portInfo, syncState, onConnect, onDisconnect, t }) {
                             <path d="M2 20c2-4 6-16 10-16s6 8 10 16" />
                         </svg>
                     </button>
-                    <label className="tcode-smoothing-label">
+                    <div className="tcode-smoothing-label">
                         <span>{t('tcSmoothing', 'Glättung')}</span>
-                        <select className="tcode-select" value={tcSettings.smoothing}
-                            onChange={e => handleSettingChange('smoothing', e.target.value)}>
-                            <option value="linear">Linear</option>
-                            <option value="pchip">PCHIP (Smooth)</option>
-                        </select>
-                    </label>
+                        <AppDropdown
+                            className="tcode-smoothing-select"
+                            menuClassName="tcode-smoothing-menu"
+                            value={tcSettings.smoothing}
+                            onChange={(next) => handleSettingChange('smoothing', next)}
+                            options={[
+                                { value: 'linear', label: 'Linear' },
+                                { value: 'pchip', label: 'PCHIP (Smooth)' },
+                            ]}
+                            usePortal
+                            portalOffset={0}
+                            ariaLabel={t('tcSmoothing', 'Glättung')}
+                        />
+                    </div>
                 </div>
             </div>
 
@@ -2002,6 +2015,7 @@ function TCodeTab({ status, portInfo, syncState, onConnect, onDisconnect, t }) {
                             <tr>
                                 <th></th>
                                 <th>{t('tcAxisCol', 'Achse')}</th>
+                                <th>{t('tcMotion', 'Motion')}</th>
                                 <th>{t('tcPosCol', 'Pos')}</th>
                                 <th>{t('tcRange', 'Bereich')}</th>
                                 <th>{t('tcSpeedLimit', 'Limit')}</th>
@@ -2011,37 +2025,95 @@ function TCodeTab({ status, portInfo, syncState, onConnect, onDisconnect, t }) {
                             {['L0', 'L1', 'L2', 'R0', 'R1', 'R2'].map(axis => {
                                 const active = activeAxes.includes(axis);
                                 const pos = axisPositions[axis];
-                                const hasPos = active && pos != null;
+                                const hasPos = pos != null;
                                 const axCfg = tcSettings.axes[axis] || {};
+                                const provider = axCfg.motionProvider || 'auto';
+                                const effective = effectiveProviders[axis] || 'off';
+                                const isExpanded = expandedAxis === axis;
                                 return (
-                                    <tr key={axis} className={active ? 'tcode-row-active' : 'tcode-row-inactive'}>
-                                        <td><div className={`tcode-axis-dot ${active ? 'active' : ''}`} /></td>
-                                        <td className="tcode-cell-name">{SHORT_LABELS[axis]}</td>
-                                        <td className="tcode-cell-pos">
-                                            {hasPos ? (
-                                                <div className="tcode-axis-bar-row">
-                                                    <div className="tcode-axis-bar">
-                                                        <div className="tcode-axis-bar-fill" style={{ width: `${Math.min(100, Math.max(0, pos))}%` }} />
+                                    <React.Fragment key={axis}>
+                                        <tr className={active ? 'tcode-row-active' : effective !== 'off' && effective !== 'script' ? 'tcode-row-provider' : 'tcode-row-inactive'}
+                                            onClick={() => setExpandedAxis(isExpanded ? null : axis)}
+                                            style={{ cursor: 'pointer' }}>
+                                            <td><div className={`tcode-axis-dot ${active ? 'active' : effective !== 'off' && effective !== 'script' ? 'provider' : ''}`} /></td>
+                                            <td className="tcode-cell-name">{SHORT_LABELS[axis]}</td>
+                                            <td className="tcode-cell-motion" onClick={e => e.stopPropagation()}>
+                                                <select className="tcode-select-mini" value={provider}
+                                                    onChange={e => { handleAxisSettingChange(axis, 'motionProvider', e.target.value); }}>
+                                                    <option value="auto">Auto</option>
+                                                    <option value="off">Off</option>
+                                                    <option value="random">Random</option>
+                                                    <option value="link">Link</option>
+                                                </select>
+                                            </td>
+                                            <td className="tcode-cell-pos">
+                                                {hasPos ? (
+                                                    <div className="tcode-axis-bar-row">
+                                                        <div className="tcode-axis-bar">
+                                                            <div className="tcode-axis-bar-fill" style={{ width: `${Math.min(100, Math.max(0, pos))}%` }} />
+                                                        </div>
+                                                        <span className="tcode-axis-value">{pos}</span>
                                                     </div>
-                                                    <span className="tcode-axis-value">{pos}</span>
-                                                </div>
-                                            ) : (
-                                                <span className="tcode-cell-muted">{active ? '—' : '–'}</span>
-                                            )}
-                                        </td>
-                                        <td className="tcode-cell-range">
-                                            <input type="number" min="0" max="100" value={axCfg.rangeMin ?? 0}
-                                                onChange={e => handleAxisSettingChange(axis, 'rangeMin', Math.max(0, Math.min(100, Number(e.target.value))))} />
-                                            <span>–</span>
-                                            <input type="number" min="0" max="100" value={axCfg.rangeMax ?? 100}
-                                                onChange={e => handleAxisSettingChange(axis, 'rangeMax', Math.max(0, Math.min(100, Number(e.target.value))))} />
-                                        </td>
-                                        <td className="tcode-cell-speed">
-                                            <input type="number" min="0" max="1000" step="10" value={axCfg.speedLimit ?? 0}
-                                                onChange={e => handleAxisSettingChange(axis, 'speedLimit', Math.max(0, Number(e.target.value)))} />
-                                            {(axCfg.speedLimit ?? 0) === 0 && <span className="tcode-hint-small">∞</span>}
-                                        </td>
-                                    </tr>
+                                                ) : (
+                                                    <span className="tcode-cell-muted">{active ? '—' : '–'}</span>
+                                                )}
+                                            </td>
+                                            <td className="tcode-cell-range" onClick={e => e.stopPropagation()}>
+                                                <input type="number" min="0" max="100" value={axCfg.rangeMin ?? 0}
+                                                    onChange={e => handleAxisSettingChange(axis, 'rangeMin', Math.max(0, Math.min(100, Number(e.target.value))))} />
+                                                <span>–</span>
+                                                <input type="number" min="0" max="100" value={axCfg.rangeMax ?? 100}
+                                                    onChange={e => handleAxisSettingChange(axis, 'rangeMax', Math.max(0, Math.min(100, Number(e.target.value))))} />
+                                            </td>
+                                            <td className="tcode-cell-speed" onClick={e => e.stopPropagation()}>
+                                                <input type="number" min="0" max="1000" step="10" value={axCfg.speedLimit ?? 0}
+                                                    onChange={e => handleAxisSettingChange(axis, 'speedLimit', Math.max(0, Number(e.target.value)))} />
+                                                {(axCfg.speedLimit ?? 0) === 0 && <span className="tcode-hint-small">∞</span>}
+                                            </td>
+                                        </tr>
+                                        {isExpanded && (provider === 'random' || provider === 'link') && (
+                                            <tr className="tcode-row-expanded">
+                                                <td colSpan="6">
+                                                    <div className="tcode-expanded-settings" onClick={e => e.stopPropagation()}>
+                                                        {provider === 'random' && (
+                                                            <>
+                                                                <label className="tcode-mini-label">
+                                                                    <span>{t('tcRandomSpeed', 'Speed')}</span>
+                                                                    <input type="range" min="1" max="100" value={axCfg.randomSpeed ?? 50}
+                                                                        onChange={e => handleAxisSettingChange(axis, 'randomSpeed', Number(e.target.value))} />
+                                                                    <span className="tcode-mini-value">{axCfg.randomSpeed ?? 50}</span>
+                                                                </label>
+                                                                <label className="tcode-mini-label">
+                                                                    <span>{t('tcRandomSmooth', 'Smooth')}</span>
+                                                                    <input type="range" min="1" max="100" value={axCfg.randomSmooth ?? 50}
+                                                                        onChange={e => handleAxisSettingChange(axis, 'randomSmooth', Number(e.target.value))} />
+                                                                    <span className="tcode-mini-value">{axCfg.randomSmooth ?? 50}</span>
+                                                                </label>
+                                                            </>
+                                                        )}
+                                                        {provider === 'link' && (
+                                                            <>
+                                                                <label className="tcode-mini-label">
+                                                                    <span>{t('tcLinkAxis', 'Quelle')}</span>
+                                                                    <select className="tcode-select-mini" value={axCfg.linkAxis || 'L0'}
+                                                                        onChange={e => handleAxisSettingChange(axis, 'linkAxis', e.target.value)}>
+                                                                        {ALL_AXES_LIST.filter(a => a !== axis).map(a => (
+                                                                            <option key={a} value={a}>{SHORT_LABELS[a]} ({a})</option>
+                                                                        ))}
+                                                                    </select>
+                                                                </label>
+                                                                <label className="tcode-mini-label tcode-mini-check">
+                                                                    <input type="checkbox" checked={!!axCfg.linkInvert}
+                                                                        onChange={e => handleAxisSettingChange(axis, 'linkInvert', e.target.checked)} />
+                                                                    <span>{t('tcLinkInvert', 'Invertieren')}</span>
+                                                                </label>
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </React.Fragment>
                                 );
                             })}
                         </tbody>
