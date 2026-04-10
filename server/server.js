@@ -6152,6 +6152,196 @@ async function generateAllHeatmaps(opts = {}) {
     return stats;
 }
 
+function getArtifactTargetVideos(opts = {}) {
+    const libraryId = String(opts?.libraryId || '').trim();
+    return Object.values(videoIndex || {}).filter((video) => {
+        if (!video?.id || !video?.filePath) return false;
+        if (libraryId && String(video?.libraryId || '') !== libraryId) return false;
+        return true;
+    });
+}
+
+function deleteThumbnailArtifactsForVideoPath(videoPath) {
+    const p = String(videoPath || '').trim();
+    if (!p) return 0;
+    const targets = [
+        getThumbPath(p),
+        getLegacyThumbPath(p),
+        getTpdbThumbPath(p),
+        getLegacyTpdbThumbPath(p),
+    ];
+    let deleted = 0;
+    for (const target of targets) {
+        if (!target) continue;
+        if (fs.existsSync(target)) {
+            try { fs.rmSync(target, { force: true }); deleted += 1; } catch { }
+        }
+        const srcPath = getThumbSourcePath(target);
+        if (srcPath && fs.existsSync(srcPath)) {
+            try { fs.rmSync(srcPath, { force: true }); } catch { }
+        }
+    }
+    return deleted;
+}
+
+function deletePreviewArtifactsForVideoPath(videoPath) {
+    const p = String(videoPath || '').trim();
+    if (!p) return 0;
+    const previewPath = getPreviewPath(p);
+    const tmpPath = `${previewPath}.tmp`;
+    let deleted = 0;
+    if (fs.existsSync(previewPath)) {
+        try { fs.rmSync(previewPath, { force: true }); deleted += 1; } catch { }
+        clearPreviewProbeCache(previewPath);
+    }
+    if (fs.existsSync(tmpPath)) {
+        try { fs.rmSync(tmpPath, { force: true }); deleted += 1; } catch { }
+    }
+    previewFailureUntil.delete(p);
+    return deleted;
+}
+
+function deleteHeatmapArtifactsForVideo(video) {
+    const filePath = String(video?.filePath || '').trim();
+    if (!filePath) return 0;
+    const targets = new Set();
+    targets.add(getHeatmapPath(filePath, 'detailed'));
+    const scriptPath = getPrimaryScriptPathForVideo(video);
+    if (scriptPath) {
+        targets.add(getVideoHeatmapCachePath(video, scriptPath, 'detailed'));
+    }
+    let deleted = 0;
+    for (const target of targets) {
+        if (!target) continue;
+        if (!fs.existsSync(target)) continue;
+        try { fs.rmSync(target, { force: true }); deleted += 1; } catch { }
+    }
+    return deleted;
+}
+
+function deleteAllHeatmapArtifacts() {
+    let deleted = 0;
+    try {
+        if (!fs.existsSync(HEATMAP_DIR)) return 0;
+        const entries = fs.readdirSync(HEATMAP_DIR, { withFileTypes: true });
+        for (const entry of entries) {
+            if (!entry.isFile()) continue;
+            const target = path.join(HEATMAP_DIR, entry.name);
+            try { fs.rmSync(target, { force: true }); deleted += 1; } catch { }
+        }
+    } catch { }
+    return deleted;
+}
+
+function deleteHeatmapArtifactsForVideos(videos = [], opts = {}) {
+    const scopeAll = opts?.scopeAll === true;
+    if (scopeAll) return deleteAllHeatmapArtifacts();
+
+    let deleted = 0;
+    const targets = new Set();
+    for (const video of videos) {
+        if (!video?.filePath) continue;
+        const baseNameRaw = String(video?.title || path.basename(String(video?.filePath || ''), path.extname(String(video?.filePath || ''))) || 'video');
+        const safeVideoName = makeSafeHeatmapNamePart(baseNameRaw, 'video');
+        targets.add(`${safeVideoName}.`);
+        const hash = Number(hashString(String(video.filePath || '')));
+        const legacyPrefix = `${Math.abs(hash).toString(36)}.`;
+        targets.add(legacyPrefix);
+    }
+
+    try {
+        if (fs.existsSync(HEATMAP_DIR)) {
+            const entries = fs.readdirSync(HEATMAP_DIR, { withFileTypes: true });
+            for (const entry of entries) {
+                if (!entry.isFile()) continue;
+                const name = String(entry.name || '');
+                const matches = Array.from(targets).some((prefix) => name.startsWith(prefix));
+                if (!matches) continue;
+                const target = path.join(HEATMAP_DIR, name);
+                try { fs.rmSync(target, { force: true }); deleted += 1; } catch { }
+            }
+        }
+    } catch { }
+
+    // Keep exact-path deletion as fallback for currently-derived paths.
+    for (const video of videos) deleted += deleteHeatmapArtifactsForVideo(video);
+    return deleted;
+}
+
+async function generateThumbnailsForVideos(videos = [], opts = {}) {
+    const onlyMissing = opts?.onlyMissing !== false;
+    const stats = {
+        processed: 0,
+        queued: 0,
+        generated: 0,
+        skipped: 0,
+    };
+    for (let i = 0; i < videos.length; i += 1) {
+        const video = videos[i];
+        const videoPath = String(video?.filePath || '').trim();
+        if (!videoPath || !fs.existsSync(videoPath)) continue;
+        stats.processed += 1;
+
+        const hasTpdbPreferred = hasTpdbPreferredThumbForPath(videoPath);
+        const hasThumb = hasValidThumbFile(getThumbPath(videoPath)) || hasValidThumbFile(getLegacyThumbPath(videoPath));
+        const hasTpdbThumb = hasValidThumbFile(getTpdbThumbPath(videoPath)) || hasValidThumbFile(getLegacyTpdbThumbPath(videoPath));
+        const hasAny = hasTpdbPreferred ? hasTpdbThumb : hasThumb;
+
+        if (onlyMissing && hasAny) {
+            stats.skipped += 1;
+            continue;
+        }
+
+        if (hasTpdbPreferred) {
+            try {
+                await ensureTpdbPreferredThumbnail(videoPath);
+                stats.generated += 1;
+            } catch {
+                stats.skipped += 1;
+            }
+        } else {
+            stats.queued += 1;
+            generateThumbnail(videoPath).then(() => { });
+        }
+
+        if (i > 0 && i % 120 === 0) {
+            await new Promise((resolve) => setImmediate(resolve));
+        }
+    }
+    return stats;
+}
+
+async function generatePreviewsForVideos(videos = [], opts = {}) {
+    const onlyMissing = opts?.onlyMissing !== false;
+    const stats = {
+        processed: 0,
+        queued: 0,
+        skipped: 0,
+    };
+    for (let i = 0; i < videos.length; i += 1) {
+        const video = videos[i];
+        const videoPath = String(video?.filePath || '').trim();
+        if (!videoPath || !fs.existsSync(videoPath)) continue;
+        stats.processed += 1;
+
+        const previewPath = getPreviewPath(videoPath);
+        const hasPlayable = await hasPlayablePreviewFile(previewPath, { minDurationSec: MIN_PLAYABLE_PREVIEW_DURATION_SEC });
+        const hasAny = hasPlayable || hasFallbackPreviewCandidate(previewPath);
+        if (onlyMissing && hasAny) {
+            stats.skipped += 1;
+            continue;
+        }
+
+        stats.queued += 1;
+        generatePreviewOnDemand(videoPath, { ignoreCooldown: true, videoId: video.id }).then(() => { }).catch(() => { });
+
+        if (i > 0 && i % 120 === 0) {
+            await new Promise((resolve) => setImmediate(resolve));
+        }
+    }
+    return stats;
+}
+
 function extractTagNameFromHeresphere(rawTag) {
     const input = typeof rawTag === 'string'
         ? rawTag
@@ -7765,6 +7955,24 @@ app.get('/api/logs', (req, res) => {
     res.json({ items: logs, total: logs.length });
 });
 
+app.post('/api/logs/client', (req, res) => {
+    try {
+        const levelRaw = String(req.body?.level || 'info').trim().toLowerCase();
+        const areaRaw = String(req.body?.area || 'client').trim().toLowerCase();
+        const messageRaw = String(req.body?.message || '').trim();
+        const meta = (req.body?.meta && typeof req.body.meta === 'object') ? req.body.meta : undefined;
+        if (!messageRaw) return res.status(400).json({ error: 'Missing message' });
+
+        const level = ['debug', 'info', 'warn', 'error'].includes(levelRaw) ? levelRaw : 'info';
+        const area = areaRaw || 'client';
+        const message = messageRaw.slice(0, 240);
+        addRuntimeLog(level, area, message, meta);
+        return res.json({ ok: true });
+    } catch (err) {
+        return res.status(500).json({ error: err?.message || 'Failed to write client log' });
+    }
+});
+
 app.post('/api/logs/clear', (_req, res) => {
     clearRuntimeLogs();
     res.json({ ok: true });
@@ -7786,6 +7994,101 @@ app.post('/api/status/cleanup-loose-files', (_req, res) => {
     } catch (err) {
         addRuntimeLog('error', 'cleanup', 'Loose/generated file cleanup failed', { error: err?.message || String(err) });
         res.status(500).json({ error: err.message || String(err) });
+    }
+});
+
+app.post('/api/artifacts/maintenance', async (req, res) => {
+    try {
+        const mode = String(req.body?.mode || 'regenerate_missing').trim().toLowerCase();
+        const validModes = new Set(['delete_only', 'regenerate_missing', 'rebuild_all']);
+        if (!validModes.has(mode)) {
+            return res.status(400).json({ error: 'Invalid mode' });
+        }
+
+        const rawTypes = Array.isArray(req.body?.types) ? req.body.types : [];
+        const allowedTypes = new Set(['thumbnails', 'previews', 'heatmaps']);
+        const types = Array.from(new Set(rawTypes.map((v) => String(v || '').trim().toLowerCase())))
+            .filter((v) => allowedTypes.has(v));
+        if (types.length === 0) {
+            return res.status(400).json({ error: 'No valid artifact types selected' });
+        }
+
+        const scope = req.body?.scope && typeof req.body.scope === 'object' ? req.body.scope : {};
+        const scopeKind = String(scope?.kind || 'all').trim().toLowerCase();
+        const libraryId = scopeKind === 'library' ? String(scope?.libraryId || '').trim() : '';
+        if (scopeKind === 'library' && !libraryId) {
+            return res.status(400).json({ error: 'Missing libraryId for library scope' });
+        }
+        const targetVideos = getArtifactTargetVideos({ libraryId });
+
+        const results = {
+            thumbnails: { processed: targetVideos.length, deleted: 0, queued: 0, generated: 0, skipped: 0 },
+            previews: { processed: targetVideos.length, deleted: 0, queued: 0, skipped: 0 },
+            heatmaps: { processed: targetVideos.length, deleted: 0, generated: 0, skipped: 0 },
+        };
+
+        if (types.includes('thumbnails')) {
+            if (mode === 'delete_only' || mode === 'rebuild_all') {
+                for (const video of targetVideos) {
+                    results.thumbnails.deleted += deleteThumbnailArtifactsForVideoPath(video.filePath);
+                }
+            }
+            if (mode === 'regenerate_missing' || mode === 'rebuild_all') {
+                const regen = await generateThumbnailsForVideos(targetVideos, {
+                    onlyMissing: mode === 'regenerate_missing',
+                });
+                results.thumbnails.queued += Number(regen?.queued || 0);
+                results.thumbnails.generated += Number(regen?.generated || 0);
+                results.thumbnails.skipped += Number(regen?.skipped || 0);
+            }
+        }
+
+        if (types.includes('previews')) {
+            if (mode === 'delete_only' || mode === 'rebuild_all') {
+                for (const video of targetVideos) {
+                    results.previews.deleted += deletePreviewArtifactsForVideoPath(video.filePath);
+                }
+            }
+            if (mode === 'regenerate_missing' || mode === 'rebuild_all') {
+                const regen = await generatePreviewsForVideos(targetVideos, {
+                    onlyMissing: mode === 'regenerate_missing',
+                });
+                results.previews.queued += Number(regen?.queued || 0);
+                results.previews.skipped += Number(regen?.skipped || 0);
+            }
+        }
+
+        if (types.includes('heatmaps')) {
+            if (mode === 'delete_only' || mode === 'rebuild_all') {
+                results.heatmaps.deleted += deleteHeatmapArtifactsForVideos(targetVideos, {
+                    scopeAll: scopeKind !== 'library',
+                });
+            }
+            if (mode === 'regenerate_missing' || mode === 'rebuild_all') {
+                const heatmapStats = await generateAllHeatmaps({ libraryId });
+                results.heatmaps.generated += Number(heatmapStats?.generated || 0);
+                results.heatmaps.skipped += Number(heatmapStats?.skipped || 0);
+            }
+        }
+
+        addRuntimeLog('info', 'maintenance', 'Artifact maintenance executed', {
+            mode,
+            types,
+            libraryId: libraryId || null,
+            processedVideos: targetVideos.length,
+            results,
+        });
+        return res.json({
+            ok: true,
+            mode,
+            types,
+            libraryId: libraryId || null,
+            processedVideos: targetVideos.length,
+            results,
+        });
+    } catch (err) {
+        addRuntimeLog('error', 'maintenance', 'Artifact maintenance failed', { error: err?.message || String(err) });
+        return res.status(500).json({ error: err?.message || String(err) });
     }
 });
 
@@ -11541,12 +11844,6 @@ const startServer = () => {
 startServer();
 
 module.exports = app;
-
-
-
-
-
-
 
 
 

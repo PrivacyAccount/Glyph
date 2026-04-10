@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useI18n } from '../i18n';
 
 function parseTimestampInput(rawValue) {
@@ -76,6 +76,8 @@ function ThumbnailTimestampDialog({ video, onClose, onApplied }) {
     const [previewNonce, setPreviewNonce] = useState(0);
     const [previewLoading, setPreviewLoading] = useState(false);
     const [previewError, setPreviewError] = useState('');
+    const [previewDisplayUrl, setPreviewDisplayUrl] = useState('');
+    const previewRequestIdRef = useRef(0);
 
     const videoTitle = useMemo(
         () => String(video?.title || video?.fileName || video?.name || ''),
@@ -116,6 +118,31 @@ function ThumbnailTimestampDialog({ video, onClose, onApplied }) {
         }, 220);
         return () => clearTimeout(id);
     }, [video?.id, parsedSeconds]);
+
+    useEffect(() => {
+        if (!previewUrl) {
+            setPreviewLoading(false);
+            return;
+        }
+        const reqId = ++previewRequestIdRef.current;
+        const img = new Image();
+        img.onload = () => {
+            if (previewRequestIdRef.current !== reqId) return;
+            setPreviewDisplayUrl(previewUrl);
+            setPreviewLoading(false);
+            setPreviewError('');
+        };
+        img.onerror = () => {
+            if (previewRequestIdRef.current !== reqId) return;
+            setPreviewLoading(false);
+            setPreviewError(t('thumbnailPreviewLoadFailed', 'Preview could not be loaded.'));
+        };
+        img.src = previewUrl;
+        return () => {
+            img.onload = null;
+            img.onerror = null;
+        };
+    }, [previewUrl, t]);
 
     const useCurrentPlayerTime = async () => {
         setError('');
@@ -261,27 +288,18 @@ function ThumbnailTimestampDialog({ video, onClose, onApplied }) {
                                 </div>
                             ) : (
                                 <div className="thumbnail-preview-box">
-                                    {previewUrl ? (
+                                    {previewDisplayUrl ? (
                                         <img
-                                            key={previewUrl}
-                                            src={previewUrl}
+                                            src={previewDisplayUrl}
                                             alt={t('thumbnailPreviewLabel', 'Preview')}
                                             style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
-                                            onLoad={() => {
-                                                setPreviewLoading(false);
-                                                setPreviewError('');
-                                            }}
-                                            onError={() => {
-                                                setPreviewLoading(false);
-                                                setPreviewError(t('thumbnailPreviewLoadFailed', 'Preview could not be loaded.'));
-                                            }}
                                         />
                                     ) : null}
                                     {previewLoading ? (
                                         <div className="playlist-dialog-hint thumbnail-preview-overlay">{t('loadingLoad', 'Loading...')}</div>
                                     ) : null}
                                     {previewError ? (
-                                        <div className="tmdb-error thumbnail-preview-overlay thumbnail-preview-error">{previewError}</div>
+                                        <div className="thumbnail-preview-overlay thumbnail-preview-error">{previewError}</div>
                                     ) : null}
                                 </div>
                             )}
@@ -305,4 +323,5 @@ function ThumbnailTimestampDialog({ video, onClose, onApplied }) {
 }
 
 export default ThumbnailTimestampDialog;
+
 

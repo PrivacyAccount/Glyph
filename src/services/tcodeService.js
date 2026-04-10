@@ -25,6 +25,32 @@ const AUTO_HOME_DURATION_MS = 600; // time to glide home
 const SOFT_START_DURATION_MS = 400; // time to ramp into script position
 
 let settings = loadSettings();
+const clientLogThrottleMap = new Map();
+
+function logDashboard(level, message, meta = undefined, opts = {}) {
+    try {
+        const key = String(opts?.key || `${level}:${message}`);
+        const throttleMs = Number(opts?.throttleMs || 0);
+        if (throttleMs > 0) {
+            const now = Date.now();
+            const last = Number(clientLogThrottleMap.get(key) || 0);
+            if (now - last < throttleMs) return;
+            clientLogThrottleMap.set(key, now);
+        }
+        fetch('/api/logs/client', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                level: String(level || 'info'),
+                area: 'tcode',
+                message: String(message || ''),
+                meta: (meta && typeof meta === 'object') ? meta : undefined,
+            }),
+        }).catch(() => { });
+    } catch {
+        // no-op
+    }
+}
 
 function defaultSettings() {
     const axisDefaults = {};
@@ -211,38 +237,52 @@ export function onDeviceDisconnect(cb) {
 
 export async function connect() {
     if (!('serial' in navigator)) {
+        logDashboard('error', 'Web Serial API not supported', undefined, { key: 'tcode-webserial-unsupported', throttleMs: 10000 });
         throw new Error('Web Serial API not supported in this browser. Please use Chrome/Edge.');
     }
 
-    // Clean up any leftover connection
-    if (port || writer) {
-        try { await disconnect(); } catch { }
+    try {
+        // Clean up any leftover connection
+        if (port || writer) {
+            try { await disconnect(); } catch { }
+        }
+
+        // Request port
+        port = await navigator.serial.requestPort();
+        await port.open({ baudRate: 115200 });
+
+        // Setup writing
+        encoderStream = new TextEncoderStream();
+        pipeAbort = new AbortController();
+        encoderStream.readable.pipeTo(port.writable, { signal: pipeAbort.signal }).catch(() => { });
+        writer = encoderStream.writable.getWriter();
+
+        // Listen for physical unplug
+        port.addEventListener('disconnect', () => {
+            console.log('[TCode] Device physically disconnected');
+            logDashboard('warn', 'T-Code device physically disconnected');
+            stopSync();
+            if (writer) { try { writer.releaseLock(); } catch { } }
+            if (pipeAbort) { pipeAbort.abort(); }
+            writer = null;
+            encoderStream = null;
+            pipeAbort = null;
+            port = null;
+            if (onDisconnectCallback) onDisconnectCallback();
+        });
+
+        const info = port.getInfo?.() || {};
+        logDashboard('info', 'T-Code connected', {
+            usbVendorId: info?.usbVendorId ?? null,
+            usbProductId: info?.usbProductId ?? null,
+            hasVendorId: Number.isFinite(Number(info?.usbVendorId)),
+            hasProductId: Number.isFinite(Number(info?.usbProductId)),
+        }, { key: 'tcode-connected', throttleMs: 500 });
+        return info;
+    } catch (err) {
+        logDashboard('error', 'T-Code connect failed', { error: String(err?.message || err || '') }, { key: 'tcode-connect-failed', throttleMs: 1000 });
+        throw err;
     }
-
-    // Request port
-    port = await navigator.serial.requestPort();
-    await port.open({ baudRate: 115200 });
-
-    // Setup writing
-    encoderStream = new TextEncoderStream();
-    pipeAbort = new AbortController();
-    encoderStream.readable.pipeTo(port.writable, { signal: pipeAbort.signal }).catch(() => {});
-    writer = encoderStream.writable.getWriter();
-
-    // Listen for physical unplug
-    port.addEventListener('disconnect', () => {
-        console.log('[TCode] Device physically disconnected');
-        stopSync();
-        if (writer) { try { writer.releaseLock(); } catch {} }
-        if (pipeAbort) { pipeAbort.abort(); }
-        writer = null;
-        encoderStream = null;
-        pipeAbort = null;
-        port = null;
-        if (onDisconnectCallback) onDisconnectCallback();
-    });
-
-    return port.getInfo();
 }
 
 export async function disconnect() {
@@ -268,11 +308,13 @@ export async function disconnect() {
         }
     } catch (err) {
         console.error('[TCode] disconnect cleanup error:', err);
+        logDashboard('error', 'T-Code disconnect cleanup failed', { error: String(err?.message || err || '') }, { key: 'tcode-disconnect-failed', throttleMs: 1000 });
         writer = null;
         encoderStream = null;
         pipeAbort = null;
         port = null;
     }
+    logDashboard('info', 'T-Code disconnected', undefined, { key: 'tcode-disconnected', throttleMs: 500 });
 }
 
 export function isConnected() {
@@ -315,10 +357,18 @@ export function prepareSync(videoId, allFunscriptData) {
             };
         }
     }
+    logDashboard('info', 'T-Code script prepared', {
+        videoId: String(videoId || ''),
+        activeAxes: Object.keys(activeScripts),
+        activeAxisCount: Object.keys(activeScripts).length,
+    }, { key: `tcode-prepare-${String(videoId || '')}`, throttleMs: 1000 });
 }
 
 export function syncPlay(videoTimeMs) {
     if (!isConnected()) return;
+    if (!Object.keys(activeScripts || {}).length) {
+        logDashboard('warn', 'T-Code syncPlay without active scripts', { videoTimeMs: Number(videoTimeMs || 0) }, { key: 'tcode-syncplay-no-scripts', throttleMs: 5000 });
+    }
     lastKnownVideoTime = videoTimeMs;
     lastVideoTimeUpdate = performance.now();
     isPlaying = true;
@@ -502,6 +552,10 @@ function syncLoop() {
     if (tcodeCommand.trim().length > 0) {
         writer.write(tcodeCommand.trim() + '\n').catch(err => {
             console.error('[TCode] Write error:', err);
+            logDashboard('error', 'T-Code serial write failed', {
+                error: String(err?.message || err || ''),
+                commandLength: tcodeCommand.trim().length,
+            }, { key: 'tcode-write-failed', throttleMs: 3000 });
             disconnect();
         });
     }

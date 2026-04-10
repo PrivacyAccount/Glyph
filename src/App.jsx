@@ -498,11 +498,22 @@ function AppContent() {
                             title={t('devicePanel', 'Geräte')}
                             style={{ marginRight: '8px' }}
                         >
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <rect x="7" y="4" width="10" height="16" rx="2" />
-                                <line x1="12" y1="17" x2="12" y2="17.01" strokeWidth="3" strokeLinecap="round" />
-                                <path d="M4 9c-1-1-1-3 0-4" />
-                                <path d="M20 9c1-1 1-3 0-4" />
+                            <svg
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                aria-hidden="true"
+                                style={{ width: '20px', height: '20px' }}
+                            >
+                                <rect x="9.5" y="4" width="5" height="14" rx="2.5" />
+                                <rect x="10" y="18" width="4" height="3" rx="0.4" />
+                                <path d="M5.1 7a8.2 8.2 0 0 0 0 10" />
+                                <path d="M7.2 9a5.2 5.2 0 0 0 0 6" />
+                                <path d="M18.9 7a8.2 8.2 0 0 1 0 10" />
+                                <path d="M16.8 9a5.2 5.2 0 0 1 0 6" />
                             </svg>
                         </button>
                         <button
@@ -717,8 +728,3 @@ function App() {
 }
 
 export default App;
-
-
-
-
-

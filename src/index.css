@@ -379,6 +379,12 @@ textarea {
   height: 18px;
 }
 
+.navbar-settings-btn img {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
+
 .navbar-settings-btn:hover {
   color: var(--text-primary);
   background: var(--bg-tertiary);

@@ -89,6 +89,16 @@ function Dashboard() {
     const [notice, setNotice] = useState('');
     const [scanBusy, setScanBusy] = useState(false);
     const [cleanupBusy, setCleanupBusy] = useState(false);
+    const [maintenanceBusy, setMaintenanceBusy] = useState(false);
+    const [maintenanceMode, setMaintenanceMode] = useState('regenerate_missing');
+    const [maintenanceScopeKind, setMaintenanceScopeKind] = useState('all');
+    const [maintenanceLibraryId, setMaintenanceLibraryId] = useState('');
+    const [maintenanceTypes, setMaintenanceTypes] = useState({
+        thumbnails: true,
+        previews: true,
+        heatmaps: true,
+    });
+    const [libraries, setLibraries] = useState([]);
     const [thumbControl, setThumbControl] = useState({ mode: 'running', queueSize: 0, running: 0 });
     const [perf, setPerf] = useState({
         now: Date.now(),
@@ -155,6 +165,15 @@ function Dashboard() {
         }
     };
 
+    const fetchLibraries = async () => {
+        try {
+            const res = await fetch('/api/libraries');
+            if (!res.ok) return;
+            const data = await res.json();
+            setLibraries(Array.isArray(data) ? data : []);
+        } catch { }
+    };
+
     const fetchLogs = async (opts = {}) => {
         try {
             if (!opts.silent) setLogsLoading(true);
@@ -180,6 +199,7 @@ function Dashboard() {
         fetchThumbControl();
         fetchPerf();
         fetchLogs();
+        fetchLibraries();
     }, []);
 
     useEffect(() => {
@@ -196,6 +216,10 @@ function Dashboard() {
         }, POLL_MS);
         return () => clearInterval(interval);
     }, [paused, logLevel, logArea, logQuery, logLimit]);
+
+    useEffect(() => {
+        if (maintenanceScopeKind !== 'library') setMaintenanceLibraryId('');
+    }, [maintenanceScopeKind]);
 
     const handleThumbControl = async (action) => {
         try {
@@ -255,6 +279,58 @@ function Dashboard() {
             setCleanupBusy(false);
         }
     };
+
+    const handleArtifactMaintenance = async () => {
+        const selectedTypes = Object.entries(maintenanceTypes)
+            .filter(([, enabled]) => !!enabled)
+            .map(([key]) => key);
+        if (selectedTypes.length === 0) {
+            setError(t('errorPrefix', 'Fehler: ') + t('selectAtLeastOneType', 'Bitte mindestens einen Typ auswählen.'));
+            return;
+        }
+        if (maintenanceMode === 'rebuild_all') {
+            const ok = window.confirm(
+                t('confirmRebuildAllArtifacts', 'Das löscht bestehende Artefakte und baut sie neu auf. Fortfahren?')
+            );
+            if (!ok) return;
+        }
+
+        setMaintenanceBusy(true);
+        setError('');
+        setNotice('');
+        try {
+            const payload = {
+                mode: maintenanceMode,
+                types: selectedTypes,
+                scope: maintenanceScopeKind === 'library'
+                    ? { kind: 'library', libraryId: String(maintenanceLibraryId || '').trim() }
+                    : { kind: 'all' },
+            };
+            const res = await fetch('/api/artifacts/maintenance', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data?.error || `Maintenance ${res.status}`);
+
+            const r = data?.results || {};
+            const thumbMsg = `T: del ${Number(r?.thumbnails?.deleted || 0)}, q ${Number(r?.thumbnails?.queued || 0)}, gen ${Number(r?.thumbnails?.generated || 0)}`;
+            const prevMsg = `P: del ${Number(r?.previews?.deleted || 0)}, q ${Number(r?.previews?.queued || 0)}`;
+            const heatMsg = `H: del ${Number(r?.heatmaps?.deleted || 0)}, gen ${Number(r?.heatmaps?.generated || 0)}`;
+            setNotice(
+                `${t('artifactMaintenanceDone', 'Artifact Maintenance abgeschlossen')} (${Number(data?.processedVideos || 0)} Videos) | ${thumbMsg} | ${prevMsg} | ${heatMsg}`
+            );
+            await fetchStatus();
+            await fetchThumbControl();
+            await fetchPerf();
+            await fetchLogs();
+        } catch (err) {
+            setError(`${t('errorPrefix', 'Fehler: ')}${err.message}`);
+        } finally {
+            setMaintenanceBusy(false);
+        }
+    };
     const handleLogsWheel = (e) => {
         const el = logsScrollRef.current;
         if (!el) return;
@@ -284,7 +360,7 @@ function Dashboard() {
                     <button className="btn btn-secondary" onClick={() => setPaused(p => !p)}>
                         {paused ? t('resumeLive', 'Live fortsetzen') : t('pauseLive', 'Live pausieren')}
                     </button>
-                    <button className="btn btn-secondary" onClick={() => { fetchStatus(); fetchThumbControl(); fetchPerf(); fetchLogs(); }}>{t('dashboardRefresh', 'Aktualisieren')}</button>
+                    <button className="btn btn-secondary" onClick={() => { fetchStatus(); fetchThumbControl(); fetchPerf(); fetchLogs(); fetchLibraries(); }}>{t('dashboardRefresh', 'Aktualisieren')}</button>
                     <button className="btn btn-secondary" onClick={handleCleanupLooseFiles} disabled={cleanupBusy}>
                         {cleanupBusy ? t('cleanupRunning', 'Bereinige...') : t('cleanupLooseFiles', 'Loose Files bereinigen')}
                     </button>
@@ -585,6 +661,84 @@ function Dashboard() {
                     )}
                 </div>
             </div>
+            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '14px', marginTop: '16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', marginBottom: '10px', flexWrap: 'wrap' }}>
+                    <div style={{ fontWeight: 600 }}>{t('artifactMaintenance', 'Artifact Maintenance')}</div>
+                    <span style={{ fontSize: '0.75rem', opacity: 0.75 }}>
+                        {t('artifactMaintenanceHint', 'Löschen und/oder neu erzeugen für Thumbnails, Previews und Heatmaps')}
+                    </span>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '8px', marginBottom: '10px' }}>
+                    <AppDropdown
+                        className="input"
+                        value={maintenanceMode}
+                        options={[
+                            { value: 'regenerate_missing', label: t('regenMissing', 'Nur fehlende neu erzeugen') },
+                            { value: 'delete_only', label: t('deleteOnly', 'Nur löschen') },
+                            { value: 'rebuild_all', label: t('rebuildAll', 'Alles neu aufbauen (löschen + erzeugen)') },
+                        ]}
+                        onChange={setMaintenanceMode}
+                    />
+                    <AppDropdown
+                        className="input"
+                        value={maintenanceScopeKind}
+                        options={[
+                            { value: 'all', label: t('scopeAllLibraries', 'Alle Bibliotheken') },
+                            { value: 'library', label: t('scopeOneLibrary', 'Eine Bibliothek') },
+                        ]}
+                        onChange={setMaintenanceScopeKind}
+                    />
+                    <AppDropdown
+                        className="input"
+                        value={maintenanceLibraryId}
+                        options={[
+                            { value: '', label: t('selectLibrary', 'Bibliothek wählen') },
+                            ...libraries.map((lib) => ({ value: String(lib.id || ''), label: String(lib.name || lib.path || lib.id || '') })),
+                        ]}
+                        onChange={setMaintenanceLibraryId}
+                        disabled={maintenanceScopeKind !== 'library' || maintenanceBusy}
+                    />
+                </div>
+                <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginBottom: '10px' }}>
+                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem' }}>
+                        <input
+                            type="checkbox"
+                            checked={!!maintenanceTypes.thumbnails}
+                            onChange={(e) => setMaintenanceTypes((prev) => ({ ...prev, thumbnails: e.target.checked }))}
+                            disabled={maintenanceBusy}
+                        />
+                        Thumbnails
+                    </label>
+                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem' }}>
+                        <input
+                            type="checkbox"
+                            checked={!!maintenanceTypes.previews}
+                            onChange={(e) => setMaintenanceTypes((prev) => ({ ...prev, previews: e.target.checked }))}
+                            disabled={maintenanceBusy}
+                        />
+                        Previews
+                    </label>
+                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem' }}>
+                        <input
+                            type="checkbox"
+                            checked={!!maintenanceTypes.heatmaps}
+                            onChange={(e) => setMaintenanceTypes((prev) => ({ ...prev, heatmaps: e.target.checked }))}
+                            disabled={maintenanceBusy}
+                        />
+                        Heatmaps
+                    </label>
+                </div>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    <button
+                        className="btn btn-primary"
+                        onClick={handleArtifactMaintenance}
+                        disabled={maintenanceBusy || (maintenanceScopeKind === 'library' && !maintenanceLibraryId)}
+                    >
+                        {maintenanceBusy ? t('running', 'Läuft...') : t('runMaintenance', 'Ausführen')}
+                    </button>
+                </div>
+            </div>
+
             <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '14px', marginTop: '16px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
                     <div style={{ fontWeight: 600 }}>{t('thumbControlTitle', 'Thumbnail-Generierung')}</div>

@@ -90,6 +90,7 @@ function DevicePanel({ open, onClose }) {
     const [tcStatus, setTcStatus] = useState('disconnected'); // disconnected | connected
     const [tcPortInfo, setTcPortInfo] = useState(null);
     const [tcSyncState, setTcSyncState] = useState('idle'); // idle | ready
+    const [tcExpandedAxes, setTcExpandedAxes] = useState({});
     const isTcConnectedRef = useRef(false);
 
     // Debug mode (device setup & script visibility)
@@ -938,9 +939,21 @@ function DevicePanel({ open, onClose }) {
                 {/* Header */}
                 <div className="device-panel-header">
                     <h2>
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <rect x="5" y="2" width="14" height="20" rx="3" />
-                            <line x1="12" y1="18" x2="12" y2="18.01" strokeWidth="3" strokeLinecap="round" />
+                        <svg
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            aria-hidden="true"
+                        >
+                            <rect x="9.5" y="4" width="5" height="14" rx="2.5" />
+                            <rect x="10" y="18" width="4" height="3" rx="0.4" />
+                            <path d="M5.1 7a8.2 8.2 0 0 0 0 10" />
+                            <path d="M7.2 9a5.2 5.2 0 0 0 0 6" />
+                            <path d="M18.9 7a8.2 8.2 0 0 1 0 10" />
+                            <path d="M16.8 9a5.2 5.2 0 0 1 0 6" />
                         </svg>
                         {t('devicePanel', 'GerÃ¤te')}
                     </h2>
@@ -1030,6 +1043,8 @@ function DevicePanel({ open, onClose }) {
                             status={tcStatus}
                             portInfo={tcPortInfo}
                             syncState={tcSyncState}
+                            expandedAxes={tcExpandedAxes}
+                            setExpandedAxes={setTcExpandedAxes}
                             onConnect={handleTcConnect}
                             onDisconnect={handleTcDisconnect}
                             t={t}
@@ -1847,13 +1862,12 @@ function ComingSoon({ label }) {
 
 // â”€â”€ TCode tab content â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-function TCodeTab({ status, portInfo, syncState, onConnect, onDisconnect, t }) {
+function TCodeTab({ status, portInfo, syncState, expandedAxes, setExpandedAxes, onConnect, onDisconnect, t }) {
     const isConnected = status === 'connected';
     const activeAxes = isConnected ? tcode.getActiveAxes() : [];
     const [axisPositions, setAxisPositions] = useState({});
     const [tcSettings, setTcSettings] = useState(() => tcode.getSettings());
     const [effectiveProviders, setEffectiveProviders] = useState({});
-    const [expandedAxis, setExpandedAxis] = useState(null);
 
     // Poll axis positions at ~15Hz when connected and syncing
     useEffect(() => {
@@ -1998,8 +2012,6 @@ function TCodeTab({ status, portInfo, syncState, onConnect, onDisconnect, t }) {
                                 { value: 'linear', label: 'Linear' },
                                 { value: 'pchip', label: 'PCHIP (Smooth)' },
                             ]}
-                            usePortal
-                            portalOffset={0}
                             ariaLabel={t('tcSmoothing', 'Glättung')}
                         />
                     </div>
@@ -2009,8 +2021,14 @@ function TCodeTab({ status, portInfo, syncState, onConnect, onDisconnect, t }) {
             {/* ── Axes ───────────────────────────────────────── */}
             {isConnected && (
                 <div className="handy-section">
-                    <div className="handy-section-title">{t('tcActiveAxes', 'Achsen')} ({activeAxes.length}/6)</div>
-                    <table className="tcode-axes-table">
+                    <div className="tcode-cards-head-row" aria-hidden="true">
+                        <div className="handy-section-title">{t('tcActiveAxes', 'Achsen')} ({activeAxes.length}/6)</div>
+                        <div className="tcode-cards-compact-head">
+                            <span>{t('tcRange', 'Range')}</span>
+                            <span>{t('tcSpeedLimit', 'Speed limit')}</span>
+                        </div>
+                    </div>
+                    <table className="tcode-axes-table tcode-axes-cards-table">
                         <thead>
                             <tr>
                                 <th></th>
@@ -2018,7 +2036,7 @@ function TCodeTab({ status, portInfo, syncState, onConnect, onDisconnect, t }) {
                                 <th>{t('tcMotion', 'Motion')}</th>
                                 <th>{t('tcPosCol', 'Pos')}</th>
                                 <th>{t('tcRange', 'Bereich')}</th>
-                                <th>{t('tcSpeedLimit', 'Limit')}</th>
+                                <th>{t('tcSpeedLimit', 'Speed limit')}</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -2029,34 +2047,43 @@ function TCodeTab({ status, portInfo, syncState, onConnect, onDisconnect, t }) {
                                 const axCfg = tcSettings.axes[axis] || {};
                                 const provider = axCfg.motionProvider || 'auto';
                                 const effective = effectiveProviders[axis] || 'off';
-                                const isExpanded = expandedAxis === axis;
+                                const isExpanded = !!expandedAxes[axis];
                                 return (
                                     <React.Fragment key={axis}>
-                                        <tr className={active ? 'tcode-row-active' : effective !== 'off' && effective !== 'script' ? 'tcode-row-provider' : 'tcode-row-inactive'}
-                                            onClick={() => setExpandedAxis(isExpanded ? null : axis)}
-                                            style={{ cursor: 'pointer' }}>
+                                        <tr className={`${active ? 'tcode-row-active' : effective !== 'off' && effective !== 'script' ? 'tcode-row-provider' : 'tcode-row-inactive'} ${isExpanded && (provider === 'random' || provider === 'link') ? 'tcode-row-with-expanded' : ''}`}
+                                        >
                                             <td><div className={`tcode-axis-dot ${active ? 'active' : effective !== 'off' && effective !== 'script' ? 'provider' : ''}`} /></td>
                                             <td className="tcode-cell-name">{SHORT_LABELS[axis]}</td>
                                             <td className="tcode-cell-motion" onClick={e => e.stopPropagation()}>
-                                                <select className="tcode-select-mini" value={provider}
-                                                    onChange={e => { handleAxisSettingChange(axis, 'motionProvider', e.target.value); }}>
-                                                    <option value="auto">Auto</option>
-                                                    <option value="off">Off</option>
-                                                    <option value="random">Random</option>
-                                                    <option value="link">Link</option>
-                                                </select>
+                                                <AppDropdown
+                                                    className="tcode-select-mini"
+                                                    menuClassName="tcode-select-mini-menu"
+                                                    usePortal={true}
+                                                    portalOffset={0}
+                                                    value={provider}
+                                                    onChange={(nextProvider) => {
+                                                        handleAxisSettingChange(axis, 'motionProvider', nextProvider);
+                                                        setExpandedAxes((prev) => ({
+                                                            ...prev,
+                                                            [axis]: nextProvider === 'link' || nextProvider === 'random',
+                                                        }));
+                                                    }}
+                                                    options={[
+                                                        { value: 'auto', label: 'Auto' },
+                                                        { value: 'off', label: 'Off' },
+                                                        { value: 'random', label: 'Random' },
+                                                        { value: 'link', label: 'Link' },
+                                                    ]}
+                                                    ariaLabel={t('tcMotion', 'Motion')}
+                                                />
                                             </td>
                                             <td className="tcode-cell-pos">
-                                                {hasPos ? (
-                                                    <div className="tcode-axis-bar-row">
-                                                        <div className="tcode-axis-bar">
-                                                            <div className="tcode-axis-bar-fill" style={{ width: `${Math.min(100, Math.max(0, pos))}%` }} />
-                                                        </div>
-                                                        <span className="tcode-axis-value">{pos}</span>
+                                                <div className="tcode-axis-bar-row">
+                                                    <div className="tcode-axis-bar">
+                                                        <div className="tcode-axis-bar-fill" style={{ width: `${hasPos ? Math.min(100, Math.max(0, pos)) : 0}%` }} />
                                                     </div>
-                                                ) : (
-                                                    <span className="tcode-cell-muted">{active ? '—' : '–'}</span>
-                                                )}
+                                                    <span className={`tcode-axis-value ${hasPos ? '' : 'tcode-cell-muted'}`}>{hasPos ? pos : '–'}</span>
+                                                </div>
                                             </td>
                                             <td className="tcode-cell-range" onClick={e => e.stopPropagation()}>
                                                 <input type="number" min="0" max="100" value={axCfg.rangeMin ?? 0}
@@ -2067,7 +2094,7 @@ function TCodeTab({ status, portInfo, syncState, onConnect, onDisconnect, t }) {
                                             </td>
                                             <td className="tcode-cell-speed" onClick={e => e.stopPropagation()}>
                                                 <input type="number" min="0" max="1000" step="10" value={axCfg.speedLimit ?? 0}
-                                                    onChange={e => handleAxisSettingChange(axis, 'speedLimit', Math.max(0, Number(e.target.value)))} />
+                                                    onChange={e => handleAxisSettingChange(axis, 'speedLimit', Math.min(1000, Math.max(0, Number(e.target.value) || 0)))} />
                                                 {(axCfg.speedLimit ?? 0) === 0 && <span className="tcode-hint-small">∞</span>}
                                             </td>
                                         </tr>
@@ -2080,12 +2107,14 @@ function TCodeTab({ status, portInfo, syncState, onConnect, onDisconnect, t }) {
                                                                 <label className="tcode-mini-label">
                                                                     <span>{t('tcRandomSpeed', 'Speed')}</span>
                                                                     <input type="range" min="1" max="100" value={axCfg.randomSpeed ?? 50}
+                                                                        style={{ '--range-pct': `${axCfg.randomSpeed ?? 50}%` }}
                                                                         onChange={e => handleAxisSettingChange(axis, 'randomSpeed', Number(e.target.value))} />
                                                                     <span className="tcode-mini-value">{axCfg.randomSpeed ?? 50}</span>
                                                                 </label>
                                                                 <label className="tcode-mini-label">
                                                                     <span>{t('tcRandomSmooth', 'Smooth')}</span>
                                                                     <input type="range" min="1" max="100" value={axCfg.randomSmooth ?? 50}
+                                                                        style={{ '--range-pct': `${axCfg.randomSmooth ?? 50}%` }}
                                                                         onChange={e => handleAxisSettingChange(axis, 'randomSmooth', Number(e.target.value))} />
                                                                     <span className="tcode-mini-value">{axCfg.randomSmooth ?? 50}</span>
                                                                 </label>
@@ -2095,12 +2124,19 @@ function TCodeTab({ status, portInfo, syncState, onConnect, onDisconnect, t }) {
                                                             <>
                                                                 <label className="tcode-mini-label">
                                                                     <span>{t('tcLinkAxis', 'Quelle')}</span>
-                                                                    <select className="tcode-select-mini" value={axCfg.linkAxis || 'L0'}
-                                                                        onChange={e => handleAxisSettingChange(axis, 'linkAxis', e.target.value)}>
-                                                                        {ALL_AXES_LIST.filter(a => a !== axis).map(a => (
-                                                                            <option key={a} value={a}>{SHORT_LABELS[a]} ({a})</option>
-                                                                        ))}
-                                                                    </select>
+                                                                    <AppDropdown
+                                                                        className="tcode-select-mini tcode-link-source-select"
+                                                                        menuClassName="tcode-select-mini-menu"
+                                                                        usePortal={true}
+                                                                        portalOffset={0}
+                                                                        value={axCfg.linkAxis || 'L0'}
+                                                                        onChange={(next) => handleAxisSettingChange(axis, 'linkAxis', next)}
+                                                                        options={ALL_AXES_LIST.filter(a => a !== axis).map(a => ({
+                                                                            value: a,
+                                                                            label: `${SHORT_LABELS[a]} (${a})`,
+                                                                        }))}
+                                                                        ariaLabel={t('tcLinkAxis', 'Quelle')}
+                                                                    />
                                                                 </label>
                                                                 <label className="tcode-mini-label tcode-mini-check">
                                                                     <input type="checkbox" checked={!!axCfg.linkInvert}

@@ -149,6 +149,14 @@ function Settings({ onLibraryUpdate, onThemeChange, onLanguageChange }) {
         if (id === 'hotkeys') return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="8.5" cy="12" r="3.5" /><path d="M12 12h9M17 12v3M20 12v2" /></svg>;
         if (id === 'browsing') return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" /><circle cx="12" cy="12" r="2.5" /></svg>;
         if (id === 'backup') return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><ellipse cx="12" cy="5" rx="8" ry="3" /><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5" /><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3" /></svg>;
+        if (id === 'connection') return (
+            <svg viewBox="0 0 384 315" fill="currentColor" aria-hidden="true">
+                <path d="M384 88.41v6.74c-2.95 9.87-14.88 15.1-23.63 8.99-6.01-4.2-14.22-14.36-20.61-19.85C256.85 13.05 134.07 11.28 49.14 80.2c-8.56 6.95-16.32 16.47-24.39 22.82-9.44 7.43-21.01 2.96-24.76-7.87v-6.74c2.02-4.57 5.51-8.74 8.98-12.37 96.87-101.17 269.99-101.73 366.41.38 3.39 3.59 6.62 7.48 8.61 11.99Z" />
+                <path d="M176.85 87.14c43.74-2.89 84.06 7.84 119.95 32.55 7.13 4.91 28.55 21.4 31.32 28.62 4.74 12.36-6.6 23.78-18.96 19.67-4.97-1.65-10.89-9.07-15.14-12.58-62.78-51.88-141.25-51.96-204.02 0-6.01 4.98-11.38 13.42-19.98 13.58-9.21.18-16.33-8.26-15.19-17.25.76-5.94 8.31-12.55 12.67-16.54 28.42-26.03 70.63-45.49 109.36-48.05Z" />
+                <path d="M180.6 174.72c20.12-1.78 38.99 1.8 56.91 10.86 8.25 4.17 28.98 17.54 31.22 26.48 3.49 13.94-11.68 24.17-23.42 15.89-4.73-3.33-8.85-8.03-14.08-11.4-26.95-17.36-57.02-16.18-82.97 2.24-7.55 5.36-10.93 12.34-21.17 11.87-11.35-.53-17.58-13.18-11.47-22.74 10.06-15.74 46.72-31.59 64.98-33.21Z" />
+                <path d="M185.8 266c28.99-4.49 41.09 31.06 18.74 44.9-22.45 13.9-48.08-11.38-34.16-34.09 2.9-4.74 9.8-9.94 15.42-10.81Z" />
+            </svg>
+        );
         if (id === 'about') return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="8" r="4" /><path d="M4 20c1.5-3.6 4.5-5.4 8-5.4s6.5 1.8 8 5.4" /></svg>;
         return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 3v18M3 12h18" /><circle cx="12" cy="12" r="9" /></svg>;
     };
@@ -2449,9 +2457,6 @@ function Settings({ onLibraryUpdate, onThemeChange, onLanguageChange }) {
 }
 
 export default Settings;
-
-
-
 
 
 
