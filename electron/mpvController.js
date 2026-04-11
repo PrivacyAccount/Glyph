@@ -100,7 +100,22 @@ class MpvController {
 
         if (assetsDir) {
             const bundledPath = path.join(assetsDir, bundledName);
-            if (fs.existsSync(bundledPath)) return bundledPath;
+            if (fs.existsSync(bundledPath)) {
+                if (isWin) return bundledPath;
+                try {
+                    fs.accessSync(bundledPath, fs.constants.X_OK);
+                    return bundledPath;
+                } catch {
+                    // Try to repair execute bit if writable (works for unpacked installs, not readonly mounts).
+                    try { fs.chmodSync(bundledPath, 0o755); } catch { }
+                    try {
+                        fs.accessSync(bundledPath, fs.constants.X_OK);
+                        return bundledPath;
+                    } catch {
+                        console.warn(`[mpv] Bundled binary is not executable: ${bundledPath}. Falling back to system mpv.`);
+                    }
+                }
+            }
         }
 
         // Fallback: system PATH
@@ -285,7 +300,12 @@ class MpvController {
             args.push(filePath);
         }
 
-        console.log(`[mpv] Starting (platform=${process.platform}, source=${mpvPath === 'mpv' ? 'system' : 'bundled'}): ${mpvPath} ${args.join(' ')}`);
+        const sourceLabel = (() => {
+            const assetsDirForSource = this._getAssetsDir();
+            if (assetsDirForSource && String(mpvPath || '').startsWith(assetsDirForSource)) return 'bundled';
+            return 'system';
+        })();
+        console.log(`[mpv] Starting (platform=${process.platform}, source=${sourceLabel}): ${mpvPath} ${args.join(' ')}`);
 
         this.process = spawn(mpvPath, args, {
             windowsHide: true,
@@ -678,7 +698,6 @@ class MpvController {
 }
 
 module.exports = MpvController;
-
 
 
 

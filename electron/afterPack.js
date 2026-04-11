@@ -3,6 +3,18 @@ const fs = require('fs');
 const { rcedit } = require('rcedit');
 
 module.exports = async function afterPack(context) {
+    if (context.electronPlatformName === 'linux') {
+        try {
+            const mpvPath = path.join(context.appOutDir, 'resources', 'vendor', 'mpv', 'mpv');
+            if (fs.existsSync(mpvPath)) {
+                fs.chmodSync(mpvPath, 0o755);
+                console.log(`[afterPack] Ensured executable bit on Linux mpv: ${mpvPath}`);
+            }
+        } catch (err) {
+            console.warn(`[afterPack] Failed to chmod Linux mpv: ${err?.message || err}`);
+        }
+        return;
+    }
     if (context.electronPlatformName !== 'win32') return;
 
     const appOutDir = context.appOutDir;

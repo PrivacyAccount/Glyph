@@ -249,7 +249,18 @@ export async function connect() {
 
         // Request port
         port = await navigator.serial.requestPort();
-        await port.open({ baudRate: 115200 });
+
+        // Some adapters/browsers can return an already-open SerialPort instance.
+        // In that case, avoid reopening (which throws "The port is already open.").
+        const alreadyOpen = !!(port?.readable || port?.writable);
+        if (!alreadyOpen) {
+            await port.open({ baudRate: 115200 });
+        } else {
+            logDashboard('warn', 'T-Code port was already open before open()', {
+                readable: !!port?.readable,
+                writable: !!port?.writable,
+            }, { key: 'tcode-port-already-open-preopen', throttleMs: 1500 });
+        }
 
         // Setup writing
         encoderStream = new TextEncoderStream();
@@ -277,6 +288,8 @@ export async function connect() {
             usbProductId: info?.usbProductId ?? null,
             hasVendorId: Number.isFinite(Number(info?.usbVendorId)),
             hasProductId: Number.isFinite(Number(info?.usbProductId)),
+            readable: !!port?.readable,
+            writable: !!port?.writable,
         }, { key: 'tcode-connected', throttleMs: 500 });
         return info;
     } catch (err) {
@@ -419,7 +432,7 @@ function sendAutoHome() {
         lastPositions[axis] = NEUTRAL_POS;
     }
     if (cmd && writer) {
-        writer.write(cmd.trim() + '\n').catch(err => {
+        writer.write(cmd.trim() + '\r\n').catch(err => {
             console.error('[TCode] Auto-home write error:', err);
         });
     }
@@ -550,7 +563,7 @@ function syncLoop() {
     }
 
     if (tcodeCommand.trim().length > 0) {
-        writer.write(tcodeCommand.trim() + '\n').catch(err => {
+        writer.write(tcodeCommand.trim() + '\r\n').catch(err => {
             console.error('[TCode] Write error:', err);
             logDashboard('error', 'T-Code serial write failed', {
                 error: String(err?.message || err || ''),

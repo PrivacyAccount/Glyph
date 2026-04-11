@@ -1947,7 +1947,9 @@ function TCodeTab({ status, portInfo, syncState, expandedAxes, setExpandedAxes, 
                         </div>
                         {isConnected && portInfo && (
                             <div className="handy-status-detail">
-                                {t('tcPortActive', 'Port aktiv')} (USB PID: {portInfo.usbProductId || '?'})
+                                {Number.isFinite(Number(portInfo?.usbProductId))
+                                    ? `${t('tcPortActive', 'Port aktiv')} (USB PID: ${portInfo.usbProductId})`
+                                    : `${t('tcPortActive', 'Port aktiv')} (${t('tcUsbPidUnavailable', 'USB PID unavailable')})`}
                             </div>
                         )}
                     </div>
