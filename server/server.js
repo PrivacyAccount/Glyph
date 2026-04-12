@@ -8404,12 +8404,72 @@ function cleanupStaleTranscodeCaches(maxAgeMs = 6 * 60 * 60 * 1000) {
     }
 }
 
+function streamVideoFileWithRange(filePath, req, res, contentType = 'application/octet-stream') {
+    const stat = fs.statSync(filePath);
+    const fileSize = stat.size;
+    const range = req.headers.range;
+
+    if (range) {
+        const parts = String(range).replace(/bytes=/i, '').split('-');
+        const start = parseInt(parts[0], 10);
+        const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+        if (!Number.isFinite(start) || start < 0 || start >= fileSize) {
+            res.writeHead(416, { 'Content-Range': `bytes */${fileSize}` });
+            return res.end();
+        }
+        const safeEnd = Number.isFinite(end) && end >= start ? Math.min(end, fileSize - 1) : (fileSize - 1);
+        const chunkSize = (safeEnd - start) + 1;
+        const stream = fs.createReadStream(filePath, { start, end: safeEnd });
+        const head = {
+            'Content-Range': `bytes ${start}-${safeEnd}/${fileSize}`,
+            'Accept-Ranges': 'bytes',
+            'Content-Length': chunkSize,
+            'Content-Type': contentType,
+        };
+        res.writeHead(206, head);
+        return stream.pipe(res);
+    }
+
+    const fullHead = {
+        'Accept-Ranges': 'bytes',
+        'Content-Length': fileSize,
+        'Content-Type': contentType,
+    };
+    res.writeHead(200, fullHead);
+    return fs.createReadStream(filePath).pipe(res);
+}
+
 // Get video file path for mpv player
 app.get('/api/videos/:id/filepath', (req, res) => {
     const video = videoIndex[req.params.id];
     if (!video) return res.status(404).json({ error: 'Video not found' });
     if (!fs.existsSync(video.filePath)) return res.status(404).json({ error: 'File not found on disk' });
     res.json({ filePath: video.filePath });
+});
+
+// Direct, codec/container-agnostic byte stream for remote MPV playback
+app.get('/api/videos/:id/direct', (req, res) => {
+    const video = videoIndex[req.params.id];
+    if (!video) return res.status(404).json({ error: 'Video not found' });
+    const filePath = String(video.filePath || '');
+    if (!filePath || !fs.existsSync(filePath)) return res.status(404).json({ error: 'File not found on disk' });
+
+    const ext = String(path.extname(filePath) || '').toLowerCase();
+    const mimeByExt = {
+        '.mp4': 'video/mp4',
+        '.mkv': 'video/x-matroska',
+        '.webm': 'video/webm',
+        '.avi': 'video/x-msvideo',
+        '.mov': 'video/quicktime',
+        '.m4v': 'video/x-m4v',
+        '.wmv': 'video/x-ms-wmv',
+        '.flv': 'video/x-flv',
+        '.ts': 'video/mp2t',
+        '.mpeg': 'video/mpeg',
+        '.mpg': 'video/mpeg',
+    };
+    const contentType = mimeByExt[ext] || 'application/octet-stream';
+    return streamVideoFileWithRange(filePath, req, res, contentType);
 });
 
 app.post('/api/videos/:id/favorite', (req, res) => {
@@ -11844,7 +11904,6 @@ const startServer = () => {
 startServer();
 
 module.exports = app;
-
 
 
 

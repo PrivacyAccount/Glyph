@@ -217,6 +217,34 @@ function downsampleTimelinePoints(points, totalDuration, maxPoints) {
     return reduced;
 }
 
+function getConfiguredServerAddress() {
+    try {
+        const localSettings = JSON.parse(localStorage.getItem('glyph_settings') || '{}');
+        const raw = String(localSettings?.serverAddress || '').trim();
+        if (!raw) return 'localhost:4000';
+        return raw.replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+    } catch {
+        return 'localhost:4000';
+    }
+}
+
+function isLoopbackAddress(address) {
+    const normalized = String(address || '').trim().replace(/^https?:\/\//i, '').toLowerCase();
+    if (!normalized) return true;
+    const host = normalized.split('/')[0].split(':')[0].replace(/^\[|\]$/g, '');
+    return host === 'localhost' || host === '127.0.0.1' || host === '::1';
+}
+
+function buildServerBaseUrl(address) {
+    const normalized = String(address || '').trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+    return `http://${normalized || 'localhost:4000'}`;
+}
+
+function buildDirectVideoUrl(serverBaseUrl, videoId) {
+    const idValue = encodeURIComponent(String(videoId || ''));
+    return `${String(serverBaseUrl || '').replace(/\/+$/, '')}/api/videos/${idValue}/direct`;
+}
+
 function VideoPlayer({ onBack }) {
     const { id } = useParams();
     const location = useLocation();
@@ -257,6 +285,9 @@ function VideoPlayer({ onBack }) {
         yaw: 0,
         pitch: 0,
     });
+    const serverAddress = useMemo(() => getConfiguredServerAddress(), []);
+    const serverBaseUrl = useMemo(() => buildServerBaseUrl(serverAddress), [serverAddress]);
+    const isRemoteServer = useMemo(() => !isLoopbackAddress(serverAddress), [serverAddress]);
 
     const resumeSeconds = useMemo(() => {
         const stateValue = Number(location?.state?.resumeFromSec || 0);
@@ -390,9 +421,10 @@ function VideoPlayer({ onBack }) {
         const map = new Map();
         queueState.forEach((entry) => {
             map.set(normalize(entry.filePath), String(entry.id));
+            map.set(normalize(buildDirectVideoUrl(serverBaseUrl, entry.id)), String(entry.id));
         });
         return map;
-    }, [queueState]);
+    }, [queueState, serverBaseUrl]);
 
     const currentQueueIndex = useMemo(() => {
         const currentId = String(activeHeatmapVideoId || id || '');
@@ -738,7 +770,11 @@ function VideoPlayer({ onBack }) {
                 const pathRes = await fetch(`/api/videos/${id}/filepath`);
                 if (!pathRes.ok) throw new Error('Failed to get video file path');
                 const { filePath } = await pathRes.json();
-                currentVideoPathRef.current = String(filePath || '');
+                const resolvedFilePath = String(filePath || '');
+                const playbackSource = isRemoteServer
+                    ? buildDirectVideoUrl(serverBaseUrl, id)
+                    : resolvedFilePath;
+                currentVideoPathRef.current = playbackSource;
 
                 if (!mounted) return;
 
@@ -754,14 +790,16 @@ function VideoPlayer({ onBack }) {
                     console.warn('Failed to parse glyph_settings:', e);
                 }
 
-                const queueFiles = queueState.map((entry) => entry.filePath);
+                const queueFiles = isRemoteServer
+                    ? queueState.map((entry) => buildDirectVideoUrl(serverBaseUrl, entry.id))
+                    : queueState.map((entry) => entry.filePath);
                 let playlistFiles = queueFiles;
                 let playlistStartIndex = queueState.findIndex((entry) => String(entry.id) === String(id));
                 if (!playlistFiles.length) {
-                    playlistFiles = [filePath];
+                    playlistFiles = [playbackSource];
                     playlistStartIndex = 0;
                 } else if (playlistStartIndex < 0) {
-                    playlistFiles = [filePath, ...playlistFiles.filter((p) => p !== filePath)];
+                    playlistFiles = [playbackSource, ...playlistFiles.filter((p) => p !== playbackSource)];
                     playlistStartIndex = 0;
                 }
                 if (playlistFiles[playlistStartIndex]) {
@@ -786,7 +824,7 @@ function VideoPlayer({ onBack }) {
                     pitch: 0,
                 });
 
-                const result = await window.electronAPI.mpvLoadFile(filePath, {
+                const result = await window.electronAPI.mpvLoadFile(playbackSource, {
                     subtitleStyles,
                     thumbfastEnabled,
                     autoFullscreen: playerAutoFullscreen,
@@ -812,7 +850,7 @@ function VideoPlayer({ onBack }) {
 
                 if (mounted) {
                     setLoading(false);
-                    rememberPlaybackVideo(resolveMetaForId(String(currentVideoIdRef.current || id)) || { id: String(currentVideoIdRef.current || id), filePath });
+                    rememberPlaybackVideo(resolveMetaForId(String(currentVideoIdRef.current || id)) || { id: String(currentVideoIdRef.current || id), filePath: resolvedFilePath });
                     clockSetPlaying(resumeSeconds > 0 ? resumeSeconds : 0);
                     sessionStartedAtRef.current = Date.now();
                     sessionStartPosRef.current = resumeSeconds > 0 ? resumeSeconds : 0;
@@ -869,7 +907,7 @@ function VideoPlayer({ onBack }) {
                 persistProgress(playbackTimeRef.current, true);
             }
         };
-    }, [id, resumeSeconds, queueState, queueIdByPath]);
+    }, [id, resumeSeconds, queueState, queueIdByPath, isRemoteServer, serverBaseUrl]);
 
     // Nur beim echten Unmount (Verlassen des Players) mpvStop aufrufen
     useEffect(() => {
