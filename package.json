@@ -1,6 +1,6 @@
 {
   "name": "Glyph",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "Local multimedia system with Funscript heatmap support",
   "main": "electron/main.js",
   "scripts": {
