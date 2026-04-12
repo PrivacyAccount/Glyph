@@ -13,6 +13,8 @@ function FileBrowser({
     library,
     onPlay,
     onOpenFunscriptManager,
+    onFetchMetadata = null,
+    refreshKey = 0,
     search = '',
     filters = {},
     selectedTagFilters = [],
@@ -141,6 +143,11 @@ function FileBrowser({
             }
         };
     }, [library.id]);
+
+    useEffect(() => {
+        if (!refreshKey) return;
+        fetchPath(currentPath || library.path, currentFolderName);
+    }, [refreshKey]);
 
     const handleNavigate = (p, name) => fetchPath(p, name);
     const handleUp = () => { if (content.parent) fetchPath(content.parent, null); };
@@ -455,6 +462,15 @@ function FileBrowser({
                 label: t('editTags', 'Tags bearbeiten'),
                 icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14"><path d="M20.59 13.41 11 3H4v7l9.59 9.59a2 2 0 0 0 2.82 0l4.18-4.18a2 2 0 0 0 0-2.82z" /><line x1="7" y1="7" x2="7.01" y2="7" /></svg>,
                 onClick: () => handleEditVideoTags(video),
+            },
+            {
+                label: t('fetchMetadata', 'Fetch metadata'),
+                icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14"><path d="M21 21l-4.35-4.35" /><circle cx="10.5" cy="10.5" r="7.5" /><path d="M10.5 6.5v8" /><path d="M6.5 10.5h8" /></svg>,
+                onClick: () => {
+                    if (typeof onFetchMetadata === 'function') {
+                        onFetchMetadata(video);
+                    }
+                },
             },
             {
                 label: t('manageScript', 'Script verwalten'),
@@ -773,8 +789,6 @@ function FileBrowser({
 }
 
 export default FileBrowser;
-
-
 
 
 

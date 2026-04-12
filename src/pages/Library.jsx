@@ -108,11 +108,13 @@ function Library({ library, onLibraryUpdate, onBack, onPlay, onSeriesSelect, onO
         library?.initialVideoTab || (library?.type === 'series' ? 'folders' : 'all')
     )); // 'all' | 'folders'
     const [folderBrowserVideos, setFolderBrowserVideos] = useState([]);
+    const [folderBrowserRefreshKey, setFolderBrowserRefreshKey] = useState(0);
 
     const isSeriesLib = library?.type === 'series';
     const isVrLib = library?.type === 'vr';
     const isVideoLib = library?.type === 'videos';
-    const isPerformerGridView = videoTab === 'performers' && isVideoLib && !isVrLib && !performerDetail;
+    const isVideoLikeLib = isVideoLib || isVrLib;
+    const isPerformerGridView = videoTab === 'performers' && isVideoLikeLib && !performerDetail;
     const hasPerformerData = useMemo(
         () => Array.isArray(videos) && videos.some((v) => Array.isArray(v?.performers) && v.performers.length > 0),
         [videos],
@@ -184,10 +186,10 @@ function Library({ library, onLibraryUpdate, onBack, onPlay, onSeriesSelect, onO
     }, [isAllVideosVirtualLibrary, videoTab]);
 
     useEffect(() => {
-        if (videoTab === 'performers' && (!isVideoLib || isVrLib)) {
+        if (videoTab === 'performers' && !isVideoLikeLib) {
             setVideoTab('all');
         }
-    }, [videoTab, isVideoLib, isVrLib]);
+    }, [videoTab, isVideoLikeLib]);
 
     useEffect(() => {
         setActiveLetter(null);
@@ -370,7 +372,7 @@ function Library({ library, onLibraryUpdate, onBack, onPlay, onSeriesSelect, onO
     }, [fetchContent]);
 
     useEffect(() => {
-        if (!library?.id || !isVideoLib || isVrLib || videoTab !== 'performers') return;
+        if (!library?.id || !isVideoLikeLib || videoTab !== 'performers') return;
         let cancelled = false;
         setPerformersLoading(true);
         fetch(`/api/libraries/${library.id}/performers`)
@@ -387,7 +389,7 @@ function Library({ library, onLibraryUpdate, onBack, onPlay, onSeriesSelect, onO
                 if (!cancelled) setPerformersLoading(false);
             });
         return () => { cancelled = true; };
-    }, [library?.id, isVideoLib, isVrLib, videoTab]);
+    }, [library?.id, isVideoLikeLib, videoTab]);
 
     useEffect(() => {
         if (!library?.id) return;
@@ -1093,14 +1095,32 @@ function Library({ library, onLibraryUpdate, onBack, onPlay, onSeriesSelect, onO
         const vid = String(data?.videoId || tpdbDialogVideo?.id || '');
         if (!vid) return;
         const meta = data?.metadata || {};
+        const mappedPerformers = (() => {
+            const candidates = Array.isArray(selectedResult?.performers)
+                ? selectedResult.performers
+                : (Array.isArray(meta?.raw?.performers) ? meta.raw.performers : []);
+            return candidates
+                .map((p) => ({
+                    id: String(p?.id || ''),
+                    name: String((typeof p === 'string' ? p : p?.name) || ''),
+                    gender: String(p?.gender || ''),
+                }))
+                .filter((p) => p.id || p.name);
+        })();
         setThumbnailVersionByVideoId((prev) => ({ ...prev, [vid]: Date.now() }));
         setVideos((prev) => prev.map((v) => {
             if (String(v?.id || '') !== vid) return v;
-            const mappedPerformers = Array.isArray(selectedResult?.performers)
-                ? selectedResult.performers
-                    .map((p) => ({ id: String(p?.id || ''), name: String(p?.name || ''), gender: String(p?.gender || '') }))
-                    .filter((p) => p.id || p.name)
-                : [];
+            return {
+                ...v,
+                title: String(meta?.title || selectedResult?.title || v?.title || ''),
+                tpdbItemType: String(meta?.itemType || selectedResult?.itemType || v?.tpdbItemType || ''),
+                tpdbItemId: String(meta?.itemId || selectedResult?.id || v?.tpdbItemId || ''),
+                performers: mappedPerformers.length > 0 ? mappedPerformers : (Array.isArray(v?.performers) ? v.performers : []),
+                hasThumbnail: true,
+            };
+        }));
+        setFolderBrowserVideos((prev) => prev.map((v) => {
+            if (String(v?.id || '') !== vid) return v;
             return {
                 ...v,
                 title: String(meta?.title || selectedResult?.title || v?.title || ''),
@@ -1121,7 +1141,11 @@ function Library({ library, onLibraryUpdate, onBack, onPlay, onSeriesSelect, onO
         }
         setTpdbDialogVideo(null);
         // Keep data source consistent for performers + refreshed metadata payload.
-        fetchContent();
+        if (videoTab === 'folders') {
+            setFolderBrowserRefreshKey((prev) => prev + 1);
+        } else {
+            fetchContent();
+        }
         if (videoTab === 'performers') {
             setPerformerDetail(null);
         }
@@ -1597,7 +1621,7 @@ function Library({ library, onLibraryUpdate, onBack, onPlay, onSeriesSelect, onO
                 icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14"><path d="M20.59 13.41 11 3H4v7l9.59 9.59a2 2 0 0 0 2.82 0l4.18-4.18a2 2 0 0 0 0-2.82z" /><line x1="7" y1="7" x2="7.01" y2="7" /></svg>,
                 onClick: () => handleEditVideoTags(item),
             });
-            if (isVideoLib && !isVrLib) {
+            if (isVideoLib || isVrLib) {
                 items.push({
                     label: t('fetchMetadata', 'Fetch metadata'),
                     icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14"><path d="M21 21l-4.35-4.35" /><circle cx="10.5" cy="10.5" r="7.5" /><path d="M10.5 6.5v8" /><path d="M6.5 10.5h8" /></svg>,
@@ -1961,7 +1985,7 @@ function Library({ library, onLibraryUpdate, onBack, onPlay, onSeriesSelect, onO
                             {!isAllVideosVirtualLibrary && (
                                 <button className={`library-tab ${videoTab === 'folders' ? 'active' : ''}`} onClick={() => setVideoTab('folders')}>{t('folderStructure', 'Ordnerstruktur')}</button>
                             )}
-                            {isVideoLib && !isVrLib && (hasPerformerData || videoTab === 'performers') && (
+                            {isVideoLikeLib && (hasPerformerData || videoTab === 'performers') && (
                                 <button
                                     className={`library-tab ${videoTab === 'performers' ? 'active' : ''}`}
                                     onClick={() => setVideoTab('performers')}
@@ -2171,6 +2195,8 @@ function Library({ library, onLibraryUpdate, onBack, onPlay, onSeriesSelect, onO
                                     library={library}
                                     onPlay={playFromFilteredQueue}
                                     onOpenFunscriptManager={onOpenFunscriptManager}
+                                    onFetchMetadata={handleOpenTpdbDialog}
+                                    refreshKey={folderBrowserRefreshKey}
                                     search={search}
                                     filters={filters}
                                     selectedTagFilters={selectedTagFilters}
@@ -2181,7 +2207,7 @@ function Library({ library, onLibraryUpdate, onBack, onPlay, onSeriesSelect, onO
                             </FileBrowserBoundary>
                         )}
 
-                        {!isSeriesLib && videoTab === 'performers' && isVideoLib && !isVrLib && (
+                        {!isSeriesLib && videoTab === 'performers' && isVideoLikeLib && (
                             <div>
                                 {performersLoading ? (
                                     <div className="loading-spinner"><div className="spinner" /></div>
@@ -2410,7 +2436,7 @@ function Library({ library, onLibraryUpdate, onBack, onPlay, onSeriesSelect, onO
 
             {/* Alphabet Bar (right side), for series folders and performer grid.
                Keep it mounted during loading so layout width stays stable. */}
-            {((isSeriesLib && videoTab === 'folders') || (!isSeriesLib && isVideoLib && !isVrLib && videoTab === 'performers' && !performerDetail)) && (
+            {((isSeriesLib && videoTab === 'folders') || (!isSeriesLib && isVideoLikeLib && videoTab === 'performers' && !performerDetail)) && (
                 <div className={`alphabet-bar${loading ? ' is-loading' : ''}`}>
                     {('ABCDEFGHIJKLMNOPQRSTUVWXYZ#').split('').map(letter => (
                         <button

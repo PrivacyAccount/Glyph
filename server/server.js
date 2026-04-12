@@ -319,6 +319,91 @@ function detectVrMetaFromName(baseName) {
     return { isVr, projection, stereoMode };
 }
 
+function detectVrMetaFromCandidates(candidates = []) {
+    const list = Array.isArray(candidates) ? candidates : [];
+    let isVr = false;
+    let projection = 'unknown';
+    let stereoMode = 'mono';
+
+    for (const candidate of list) {
+        const raw = String(candidate || '').trim();
+        if (!raw) continue;
+        const detected = detectVrMetaFromName(raw);
+        if (detected.isVr) isVr = true;
+        if (projection === 'unknown' && detected.projection !== 'unknown') {
+            projection = detected.projection;
+        }
+        if (stereoMode === 'mono' && detected.stereoMode !== 'mono') {
+            stereoMode = detected.stereoMode;
+        }
+    }
+
+    return {
+        isVr,
+        projection: normalizeVrProjection(projection),
+        stereoMode: normalizeVrStereoMode(stereoMode),
+    };
+}
+
+function detectVrMetaFromMetadataRaw(raw = {}) {
+    const src = raw && typeof raw === 'object' ? raw : {};
+    const pickString = (...values) => {
+        for (const value of values) {
+            const text = String(value || '').trim();
+            if (text) return text;
+        }
+        return '';
+    };
+    const pickBool = (...values) => {
+        for (const value of values) {
+            if (typeof value === 'boolean') return value;
+            const text = String(value || '').trim().toLowerCase();
+            if (!text) continue;
+            if (['1', 'true', 'yes', 'on'].includes(text)) return true;
+            if (['0', 'false', 'no', 'off'].includes(text)) return false;
+        }
+        return null;
+    };
+
+    const tags = []
+        .concat(Array.isArray(src?.tags) ? src.tags : [])
+        .concat(Array.isArray(src?.categories) ? src.categories : [])
+        .map((tag) => (typeof tag === 'string' ? tag : (tag?.name || tag?.label || tag?.title || '')))
+        .filter(Boolean);
+
+    const projectionField = pickString(
+        src?.projection,
+        src?.projectionType,
+        src?.projection_type,
+        src?.vrProjection,
+        src?.vr_projection,
+        src?.videoProjection,
+        src?.video_projection
+    );
+    const stereoField = pickString(
+        src?.stereoMode,
+        src?.stereo_mode,
+        src?.stereo,
+        src?.vrStereoMode,
+        src?.vr_stereo_mode,
+        src?.stereoType,
+        src?.stereo_type
+    );
+    const vrFlag = pickBool(
+        src?.isVr,
+        src?.is_vr,
+        src?.vr,
+        src?.isVR,
+        src?.virtualReality
+    );
+
+    const detected = detectVrMetaFromCandidates([projectionField, stereoField, ...tags]);
+    const projection = normalizeVrProjection(detected.projection);
+    const stereoMode = normalizeVrStereoMode(detected.stereoMode);
+    const isVr = (vrFlag === true) || detected.isVr || projection !== 'unknown' || stereoMode !== 'mono';
+    return { isVr, projection, stereoMode };
+}
+
 migrateLegacyDataIfNeeded();
 
 // â”€â”€ Metadata Database (stored in app data, NOT next to videos) â”€â”€
@@ -5266,12 +5351,32 @@ function buildQuickThumbSeekCandidates() {
 }
 
 function buildVrMetaForVideo(baseTitle, filePath, libraryType = 'videos') {
-    const detected = detectVrMetaFromName(baseTitle);
+    const tpdbMeta = filePath ? getTpdbMetaForVideoPath(filePath) : null;
+    const fileNameBase = filePath
+        ? path.basename(String(filePath || ''), path.extname(String(filePath || '')))
+        : '';
+    const detectedFromRaw = detectVrMetaFromMetadataRaw(tpdbMeta?.raw || {});
+    const detected = detectVrMetaFromCandidates([
+        fileNameBase,
+        baseTitle,
+        tpdbMeta?.title,
+        tpdbMeta?.sourceUrl,
+    ]);
     const override = getVrMetaByPath(filePath);
-    const projection = normalizeVrProjection(override?.projection || detected.projection);
-    const stereoMode = normalizeVrStereoMode(override?.stereoMode || detected.stereoMode);
+    // Raw metadata defaults to unknown/mono even when no real VR hints exist.
+    // Only let raw override filename/title detection when it carries a meaningful value.
+    const rawProjection = normalizeVrProjection(detectedFromRaw?.projection);
+    const rawStereoMode = normalizeVrStereoMode(detectedFromRaw?.stereoMode);
+    const detectedProjection = normalizeVrProjection(detected?.projection);
+    const detectedStereoMode = normalizeVrStereoMode(detected?.stereoMode);
+    const baseProjection = rawProjection !== 'unknown' ? rawProjection : detectedProjection;
+    const baseStereoMode = rawStereoMode !== 'mono' ? rawStereoMode : detectedStereoMode;
+    const overrideProjection = normalizeVrProjection(override?.projection);
+    const overrideStereoMode = normalizeVrStereoMode(override?.stereoMode);
+    const projection = overrideProjection !== 'unknown' ? overrideProjection : baseProjection;
+    const stereoMode = overrideStereoMode !== 'mono' ? overrideStereoMode : baseStereoMode;
     const isVrLibrary = String(libraryType || '').toLowerCase() === 'vr';
-    const isVr = isVrLibrary || !!detected.isVr || projection !== 'unknown' || stereoMode !== 'mono';
+    const isVr = isVrLibrary || !!detectedFromRaw.isVr || !!detected.isVr || projection !== 'unknown' || stereoMode !== 'mono';
     return { isVr, vrProjection: projection, vrStereoMode: stereoMode };
 }
 
@@ -7648,28 +7753,32 @@ app.get('/api/libraries/:id/videos', async (req, res) => {
         }
     }
 
-    res.json(results.map(v => ({
-        id: v.id, title: v.title, fileName: v.fileName, extension: v.extension,
-        size: v.size, modifiedAt: v.modifiedAt, hasFunscript: v.hasFunscript,
-        durationSec: Number(v.durationSec || 0),
-        filePath: v.filePath,
-        hasAudio: typeof v.hasAudio === 'boolean'
-            ? v.hasAudio
-            : getIndexedHasAudio(v.filePath, Number(v.size || 0), Number(v.modifiedAt || 0)),
-        libraryType: v.libraryType || 'videos',
-        libraryId: String(v.libraryId || req.params.id || ''),
-        isVr: !!v.isVr,
-        vrProjection: normalizeVrProjection(v.vrProjection),
-        vrStereoMode: normalizeVrStereoMode(v.vrStereoMode),
-        hasThumbnail: hasAnyThumbForPath(v.filePath),
-        thumbVersion: getVideoThumbVersion(v.filePath, Number(v.modifiedAt || 0)),
-        axes: v.axes || [], isMultiAxis: v.isMultiAxis || false,
-        tags: Array.isArray(v.tags) ? v.tags : [],
-        performers: Array.isArray(v.performers) ? v.performers : [],
-        isFavorite: getVideoIsFavorite(v, getVideoFolderMetadata(v)),
-        tpdbItemType: String(v.tpdbItemType || ''),
-        tpdbItemId: String(v.tpdbItemId || ''),
-    })));
+    res.json(results.map(v => {
+        const baseTitle = String(v?.title || path.basename(v?.filePath || '', path.extname(v?.filePath || '')) || '');
+        const effectiveVr = buildVrMetaForVideo(baseTitle, v?.filePath || '', v?.libraryType || 'videos');
+        return {
+            id: v.id, title: v.title, fileName: v.fileName, extension: v.extension,
+            size: v.size, modifiedAt: v.modifiedAt, hasFunscript: v.hasFunscript,
+            durationSec: Number(v.durationSec || 0),
+            filePath: v.filePath,
+            hasAudio: typeof v.hasAudio === 'boolean'
+                ? v.hasAudio
+                : getIndexedHasAudio(v.filePath, Number(v.size || 0), Number(v.modifiedAt || 0)),
+            libraryType: v.libraryType || 'videos',
+            libraryId: String(v.libraryId || req.params.id || ''),
+            isVr: !!effectiveVr.isVr,
+            vrProjection: normalizeVrProjection(effectiveVr.vrProjection),
+            vrStereoMode: normalizeVrStereoMode(effectiveVr.vrStereoMode),
+            hasThumbnail: hasAnyThumbForPath(v.filePath),
+            thumbVersion: getVideoThumbVersion(v.filePath, Number(v.modifiedAt || 0)),
+            axes: v.axes || [], isMultiAxis: v.isMultiAxis || false,
+            tags: Array.isArray(v.tags) ? v.tags : [],
+            performers: Array.isArray(v.performers) ? v.performers : [],
+            isFavorite: getVideoIsFavorite(v, getVideoFolderMetadata(v)),
+            tpdbItemType: String(v.tpdbItemType || ''),
+            tpdbItemId: String(v.tpdbItemId || ''),
+        };
+    }));
 });
 
 // Folders for a series library
@@ -7758,7 +7867,7 @@ app.get('/api/libraries/:id/browse', (req, res) => {
                     applyTpdbMetaToVideoObject(video);
                     enqueueAudioIndex(video);
                     videos.push({
-                        id: video.id, name: entry.name, title: baseName,
+                        id: video.id, name: entry.name, title: video?.title || baseName,
                         path: fullPath, filePath: fullPath, size: stats.size,
                         modifiedAt: Number(stats?.mtimeMs || Date.now()),
                         extension: ext, hasFunscript: axisInfo.hasFunscript,
@@ -10830,8 +10939,11 @@ app.post('/api/tpdb/search', async (req, res) => {
             providerOrder,
         });
         if (!video && !urlInput && !query) return res.status(400).json({ error: 'Missing video/query/url' });
-        if (video && String(video?.libraryType || '').toLowerCase() !== 'videos') {
-            return res.status(400).json({ error: 'Video metadata fetch is available for video libraries only' });
+        if (video) {
+            const libraryType = String(video?.libraryType || '').toLowerCase();
+            if (libraryType !== 'videos' && libraryType !== 'vr') {
+                return res.status(400).json({ error: 'Metadata fetch is available for video/VR libraries only' });
+            }
         }
 
         // Direct URL mode
@@ -10966,8 +11078,11 @@ app.post('/api/tpdb/apply', async (req, res) => {
         const providerHint = String(req.body?.provider || '').trim().toLowerCase();
         const video = videoIndex[videoId];
         if (!video?.filePath) return res.status(404).json({ error: 'Video not found' });
-        if (String(video?.libraryType || '').toLowerCase() !== 'videos') {
-            return res.status(400).json({ error: 'Video metadata fetch is available for video libraries only' });
+        {
+            const libraryType = String(video?.libraryType || '').toLowerCase();
+            if (libraryType !== 'videos' && libraryType !== 'vr') {
+                return res.status(400).json({ error: 'Metadata fetch is available for video/VR libraries only' });
+            }
         }
         addRuntimeLog('info', 'tpdb', 'TPDB apply requested', {
             videoId,
@@ -11110,6 +11225,7 @@ app.post('/api/tpdb/apply', async (req, res) => {
         }
 
         syncTpdbVideoMetaIntoCaches(video.filePath);
+        refreshVrMetaForPath(video.filePath);
         addRuntimeLog('info', 'tpdb', 'TPDB apply completed', {
             videoId,
             provider,
@@ -11904,8 +12020,3 @@ const startServer = () => {
 startServer();
 
 module.exports = app;
-
-
-
-
-

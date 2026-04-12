@@ -144,12 +144,17 @@ function VideoCard({
         const width = Number(widthRaw || 0);
         const height = Number(heightRaw || 0);
         if (!(width > 0) || !(height > 0)) return '';
-        if (height >= 2160) return '4K';
-        if (height >= 1440) return '1440p';
-        if (height >= 1080) return '1080p';
-        if (height >= 720) return '720p';
-        if (height >= 480) return '480p';
-        return `${Math.round(height)}p`;
+        const longEdge = Math.max(width, height);
+        const shortEdge = Math.min(width, height);
+        if (longEdge >= 7680 || shortEdge >= 4320) return '8K';
+        if (longEdge >= 6144 || shortEdge >= 3160) return '6K';
+        if (longEdge >= 5120 || shortEdge >= 2880) return '5K';
+        if (longEdge >= 3840 || shortEdge >= 2160) return '4K';
+        if (shortEdge >= 1440) return '1440p';
+        if (shortEdge >= 1080) return '1080p';
+        if (shortEdge >= 720) return '720p';
+        if (shortEdge >= 480) return '480p';
+        return `${Math.round(shortEdge)}p`;
     };
 
     const isFemalePerformer = (performer) => {
