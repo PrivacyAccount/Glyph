@@ -3268,6 +3268,9 @@ function cleanupOrphanArtifacts(options = {}) {
         metadataDeleted: 0,
         thumbnailsDeleted: 0,
         tpdbThumbnailsDeleted: 0,
+        tpdbVideoMetadataDeleted: 0,
+        tpdbVideoPerformerLinksDeleted: 0,
+        tpdbPerformersDeleted: 0,
         tpdbPerformerImagesDeleted: 0,
         previewsDeleted: 0,
         postersDeleted: 0,
@@ -3362,6 +3365,84 @@ function cleanupOrphanArtifacts(options = {}) {
         }
     }
 
+    // 2c) Cleanup orphan fetched metadata/performer relations for deleted videos.
+    const validVideoKeys = new Set();
+    for (const v of Object.values(videoIndex || {})) {
+        const filePath = String(v?.filePath || '').trim();
+        if (!filePath || !fs.existsSync(filePath) || !isUnderAnyLibraryRoot(filePath, libraries)) continue;
+        const key = normalizeVideoPathKey(filePath);
+        if (key) validVideoKeys.add(key);
+    }
+
+    const tpdbMetaRows = db.prepare(`
+        SELECT video_key AS videoKey, video_path AS videoPath
+        FROM tpdb_video_metadata
+    `).all() || [];
+    const deleteTpdbMeta = db.prepare(`DELETE FROM tpdb_video_metadata WHERE video_key = ?`);
+    const validTpdbKeys = new Set(validVideoKeys);
+    for (const row of tpdbMetaRows) {
+        const rowPath = String(row?.videoPath || '').trim();
+        const rowKey = String(row?.videoKey || '').trim() || normalizeVideoPathKey(rowPath);
+        const pathLooksValid = !!rowPath && fs.existsSync(rowPath) && isUnderAnyLibraryRoot(rowPath, libraries);
+        if (rowKey && (validVideoKeys.has(rowKey) || pathLooksValid)) {
+            validTpdbKeys.add(rowKey);
+            continue;
+        }
+        if (!rowKey) continue;
+        try {
+            const del = deleteTpdbMeta.run(rowKey);
+            stats.tpdbVideoMetadataDeleted += Number(del?.changes || 0);
+            tpdbVideoMetaByKey.delete(rowKey);
+        } catch {
+            stats.errors += 1;
+        }
+    }
+
+    const relationRows = db.prepare(`
+        SELECT video_key AS videoKey
+        FROM tpdb_video_performers
+    `).all() || [];
+    const deleteTpdbVideoRefs = db.prepare(`DELETE FROM tpdb_video_performers WHERE video_key = ?`);
+    const orphanRelationKeys = new Set();
+    for (const row of relationRows) {
+        const rowKey = String(row?.videoKey || '').trim();
+        if (!rowKey || validTpdbKeys.has(rowKey)) continue;
+        orphanRelationKeys.add(rowKey);
+    }
+    for (const key of orphanRelationKeys) {
+        try {
+            const del = deleteTpdbVideoRefs.run(key);
+            stats.tpdbVideoPerformerLinksDeleted += Number(del?.changes || 0);
+            tpdbVideoPerformersByKey.delete(key);
+        } catch {
+            stats.errors += 1;
+        }
+    }
+
+    const referencedPerformerIds = new Set(
+        (db.prepare(`SELECT DISTINCT performer_id AS performerId FROM tpdb_video_performers`).all() || [])
+            .map((row) => String(row?.performerId || '').trim())
+            .filter(Boolean)
+    );
+    const performerRows = db.prepare(`SELECT performer_id AS performerId FROM tpdb_performers`).all() || [];
+    const deleteTpdbPerformer = db.prepare(`DELETE FROM tpdb_performers WHERE performer_id = ?`);
+    for (const row of performerRows) {
+        const performerId = String(row?.performerId || '').trim();
+        if (!performerId || referencedPerformerIds.has(performerId)) continue;
+        try {
+            const del = deleteTpdbPerformer.run(performerId);
+            stats.tpdbPerformersDeleted += Number(del?.changes || 0);
+            tpdbPerformerById.delete(performerId);
+            const imagePath = getTpdbPerformerImagePath(performerId);
+            if (imagePath && fs.existsSync(imagePath)) {
+                fs.rmSync(imagePath, { force: true });
+                stats.tpdbPerformerImagesDeleted += 1;
+            }
+        } catch {
+            stats.errors += 1;
+        }
+    }
+
     // 3) Cleanup orphan posters for deleted folders/libraries.
     const validPosterPaths = new Set();
     for (const lib of libraries) {
@@ -3396,7 +3477,10 @@ function cleanupOrphanArtifacts(options = {}) {
     }
 
     const validPerformerImageNames = new Set(
-        Array.from(tpdbPerformerById.keys()).map((id) => path.basename(getTpdbPerformerImagePath(id)))
+        (db.prepare(`SELECT performer_id AS performerId FROM tpdb_performers`).all() || [])
+            .map((row) => String(row?.performerId || '').trim())
+            .filter(Boolean)
+            .map((id) => path.basename(getTpdbPerformerImagePath(id)))
     );
     if (fs.existsSync(TPDB_PERFORMER_DIR)) {
         for (const file of fs.readdirSync(TPDB_PERFORMER_DIR)) {
@@ -8094,6 +8178,9 @@ app.post('/api/status/cleanup-loose-files', (_req, res) => {
             Number(stats?.metadataDeleted || 0) +
             Number(stats?.thumbnailsDeleted || 0) +
             Number(stats?.tpdbThumbnailsDeleted || 0) +
+            Number(stats?.tpdbVideoMetadataDeleted || 0) +
+            Number(stats?.tpdbVideoPerformerLinksDeleted || 0) +
+            Number(stats?.tpdbPerformersDeleted || 0) +
             Number(stats?.tpdbPerformerImagesDeleted || 0) +
             Number(stats?.previewsDeleted || 0) +
             Number(stats?.postersDeleted || 0) +

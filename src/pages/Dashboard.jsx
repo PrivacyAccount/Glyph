@@ -270,7 +270,9 @@ function Dashboard() {
             const s = data?.stats || {};
             setNotice(
                 `${t('cleanupLooseDone', 'Loose files bereinigt')}: ${totalDeleted} | ` +
-                `Thumbs ${Number(s.thumbnailsDeleted || 0)}, Previews ${Number(s.previewsDeleted || 0)}, Posters ${Number(s.postersDeleted || 0)}`
+                `Thumbs ${Number(s.thumbnailsDeleted || 0)}, TPDB Thumbs ${Number(s.tpdbThumbnailsDeleted || 0)}, ` +
+                `Performer Images ${Number(s.tpdbPerformerImagesDeleted || 0)}, ` +
+                `Previews ${Number(s.previewsDeleted || 0)}, Posters ${Number(s.postersDeleted || 0)}`
             );
             await fetchLogs();
         } catch (err) {
