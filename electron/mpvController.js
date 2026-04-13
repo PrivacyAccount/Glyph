@@ -300,62 +300,109 @@ class MpvController {
             args.push(filePath);
         }
 
-        const sourceLabel = (() => {
+        const bundledMpvPath = (() => {
             const assetsDirForSource = this._getAssetsDir();
-            if (assetsDirForSource && String(mpvPath || '').startsWith(assetsDirForSource)) return 'bundled';
+            if (!assetsDirForSource) return null;
+            return path.join(assetsDirForSource, process.platform === 'win32' ? 'mpv.exe' : 'mpv');
+        })();
+        const sourceLabel = (() => {
+            if (bundledMpvPath && String(mpvPath || '') === String(bundledMpvPath)) return 'bundled';
             return 'system';
         })();
-        console.log(`[mpv] Starting (platform=${process.platform}, source=${sourceLabel}): ${mpvPath} ${args.join(' ')}`);
 
-        this.process = spawn(mpvPath, args, {
-            windowsHide: true,
-            stdio: ['ignore', 'pipe', 'pipe'],
-            env: (() => {
-                const currentPath = String(process.env.PATH || '');
-                const mpvDir = path.dirname(mpvPath);
-                const sep = process.platform === 'win32' ? ';' : ':';
-                return {
-                    ...process.env,
-                    PATH: currentPath
-                        .split(sep)
-                        .map((p) => String(p || '').trim())
-                        .filter(Boolean)
-                        .some((p) => p.toLowerCase() === mpvDir.toLowerCase())
-                        ? currentPath
-                        : `${mpvDir}${sep}${currentPath}`,
+        const startProcess = async (launchPath, launchSourceLabel) => {
+            console.log(`[mpv] Starting (platform=${process.platform}, source=${launchSourceLabel}): ${launchPath} ${args.join(' ')}`);
+
+            const child = spawn(launchPath, args, {
+                windowsHide: true,
+                stdio: ['ignore', 'pipe', 'pipe'],
+                env: (() => {
+                    const currentPath = String(process.env.PATH || '');
+                    const mpvDir = path.dirname(launchPath);
+                    const sep = process.platform === 'win32' ? ';' : ':';
+                    return {
+                        ...process.env,
+                        PATH: currentPath
+                            .split(sep)
+                            .map((p) => String(p || '').trim())
+                            .filter(Boolean)
+                            .some((p) => p.toLowerCase() === mpvDir.toLowerCase())
+                            ? currentPath
+                            : `${mpvDir}${sep}${currentPath}`,
+                    };
+                })(),
+            });
+            this.process = child;
+
+            child.stdout.on('data', (data) => {
+                const msg = data.toString().trim();
+                if (msg) console.log(`[mpv stdout] ${msg}`);
+            });
+
+            child.stderr.on('data', (data) => {
+                const msg = data.toString().trim();
+                if (msg) console.error(`[mpv stderr] ${msg}`);
+            });
+
+            child.on('exit', (code, signal) => {
+                console.log(`[mpv] Process exited (code=${code}, signal=${signal || 'none'})`);
+                const wasDestroyed = this._destroyed;
+                this._cleanup();
+                if (this.eventCallback && !wasDestroyed) {
+                    this.eventCallback({ event: 'eof', reason: 'process-exit' });
+                }
+            });
+
+            child.on('error', (err) => {
+                console.error('[mpv] Process error:', err);
+                this._cleanup();
+            });
+
+            // Detect immediate spawn failures (e.g. EACCES on noexec AppImage mounts).
+            await new Promise((resolve, reject) => {
+                let settled = false;
+                const done = (fn, value) => {
+                    if (settled) return;
+                    settled = true;
+                    child.off('spawn', onSpawn);
+                    child.off('error', onError);
+                    fn(value);
                 };
-            })(),
-        });
+                const onSpawn = () => done(resolve);
+                const onError = (err) => done(reject, err);
+                child.once('spawn', onSpawn);
+                child.once('error', onError);
+            });
 
-        this.process.stdout.on('data', (data) => {
-            const msg = data.toString().trim();
-            if (msg) console.log(`[mpv stdout] ${msg}`);
-        });
+            // Wait for the IPC pipe to become available
+            await this._connectPipe();
 
-        this.process.stderr.on('data', (data) => {
-            const msg = data.toString().trim();
-            if (msg) console.error(`[mpv stderr] ${msg}`);
-        });
+            // Observe properties for real-time updates
+            await this._observeProperties();
+        };
 
-        this.process.on('exit', (code, signal) => {
-            console.log(`[mpv] Process exited (code=${code}, signal=${signal || 'none'})`);
-            const wasDestroyed = this._destroyed;
-            this._cleanup();
-            if (this.eventCallback && !wasDestroyed) {
-                this.eventCallback({ event: 'eof', reason: 'process-exit' });
-            }
-        });
+        try {
+            await startProcess(mpvPath, sourceLabel);
+        } catch (err) {
+            const systemMpv = this._resolveSystemBinary('mpv');
+            const canFallbackToSystem =
+                process.platform === 'linux' &&
+                sourceLabel === 'bundled' &&
+                systemMpv &&
+                String(systemMpv) !== String(mpvPath) &&
+                (
+                    err?.code === 'EACCES' ||
+                    err?.code === 'EPERM' ||
+                    String(err?.message || '').includes('Failed to connect to mpv IPC pipe')
+                );
 
-        this.process.on('error', (err) => {
-            console.error('[mpv] Process error:', err);
-            this._cleanup();
-        });
+            if (!canFallbackToSystem) throw err;
 
-        // Wait for the IPC pipe to become available
-        await this._connectPipe();
-
-        // Observe properties for real-time updates
-        await this._observeProperties();
+            console.warn(`[mpv] Bundled launch failed (${err?.code || 'error'}: ${err?.message || err}). Retrying with system mpv: ${systemMpv}`);
+            try { await this.destroy(); } catch { }
+            this._destroyed = false;
+            await startProcess(systemMpv, 'system');
+        }
 
         // Apply VR mode (optional)
         try {
@@ -698,7 +745,6 @@ class MpvController {
 }
 
 module.exports = MpvController;
-
 
 
 
