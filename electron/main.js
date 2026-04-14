@@ -552,11 +552,36 @@ function createWindow() {
 
     ses.on('select-serial-port', (event, portList, webContents, callback) => {
         event.preventDefault();
-        if (portList && portList.length > 0) {
-            callback(portList[0].portId);
-        } else {
+        if (!Array.isArray(portList) || portList.length === 0) {
             callback('');
+            return;
         }
+
+        // Prefer real USB serial devices over generic motherboard/virtual COM ports.
+        const selected = portList.find((entry) => {
+            const vid = Number(entry?.usbVendorId);
+            const pid = Number(entry?.usbProductId);
+            return Number.isFinite(vid) && vid > 0 && Number.isFinite(pid) && pid > 0;
+        }) || portList[0];
+
+        try {
+            console.log('[serial] select-serial-port candidates:', (portList || []).map((p) => ({
+                displayName: p?.displayName || '',
+                portName: p?.portName || '',
+                portId: p?.portId || '',
+                usbVendorId: p?.usbVendorId ?? null,
+                usbProductId: p?.usbProductId ?? null,
+            })));
+            console.log('[serial] selected serial port:', {
+                displayName: selected?.displayName || '',
+                portName: selected?.portName || '',
+                portId: selected?.portId || '',
+                usbVendorId: selected?.usbVendorId ?? null,
+                usbProductId: selected?.usbProductId ?? null,
+            });
+        } catch { }
+
+        callback(selected?.portId || '');
     });
     ses.on('serial-port-added', () => {});
     ses.on('serial-port-removed', () => {});
