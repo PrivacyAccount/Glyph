@@ -132,6 +132,11 @@ function DevicePanel({ open, onClose }) {
     }, [debugEnabled]);
 
     useEffect(() => {
+        // Persist key as user types, so it survives restarts even before pressing Connect.
+        handy.saveKey(connectionKey);
+    }, [connectionKey]);
+
+    useEffect(() => {
         const next = Math.max(0, Math.min(100, Number(debugRangeMin) || 0));
         debugRangeMinRef.current = next;
         try { localStorage.setItem(DEBUG_RANGE_MIN_KEY, String(next)); } catch { }

@@ -793,14 +793,23 @@ function VideoPlayer({ onBack }) {
                 const queueFiles = isRemoteServer
                     ? queueState.map((entry) => buildDirectVideoUrl(serverBaseUrl, entry.id))
                     : queueState.map((entry) => entry.filePath);
-                let playlistFiles = queueFiles;
+                const sanitizePlaylistEntry = (value) => String(value || '').replace(/[\r\n]+/g, '').trim();
+                let playlistFiles = queueFiles.map(sanitizePlaylistEntry).filter(Boolean);
                 let playlistStartIndex = queueState.findIndex((entry) => String(entry.id) === String(id));
                 if (!playlistFiles.length) {
                     playlistFiles = [playbackSource];
                     playlistStartIndex = 0;
-                } else if (playlistStartIndex < 0) {
-                    playlistFiles = [playbackSource, ...playlistFiles.filter((p) => p !== playbackSource)];
-                    playlistStartIndex = 0;
+                } else {
+                    const safePlaybackSource = sanitizePlaylistEntry(playbackSource);
+                    if (playlistStartIndex < 0 || !playlistFiles[playlistStartIndex]) {
+                        playlistFiles = [safePlaybackSource, ...playlistFiles.filter((p) => p !== safePlaybackSource)];
+                        playlistStartIndex = 0;
+                    } else {
+                        // Always force the selected entry to the verified source from /api/videos/:id/filepath.
+                        // This avoids queue/path inconsistencies from list views causing startup failures.
+                        playlistFiles = [...playlistFiles];
+                        playlistFiles[playlistStartIndex] = safePlaybackSource;
+                    }
                 }
                 if (playlistFiles[playlistStartIndex]) {
                     const normalize = (p) => String(p || '').replace(/\//g, '\\').toLowerCase();

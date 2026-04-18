@@ -121,21 +121,29 @@ export async function setOffset(connectionKey, offsetMs) {
 // ── Persistence helpers ────────────────────────────────────────────────
 
 export function getSavedKey() {
-    return localStorage.getItem(LS_KEY) || '';
+    try {
+        return localStorage.getItem(LS_KEY) || '';
+    } catch {
+        return '';
+    }
 }
 
 export function saveKey(key) {
-    localStorage.setItem(LS_KEY, key);
+    try { localStorage.setItem(LS_KEY, String(key || '').trim()); } catch { }
 }
 
 export function getSavedOffset() {
-    const raw = localStorage.getItem(LS_OFFSET_KEY);
-    const n = Number(raw);
-    return Number.isFinite(n) ? n : 0;
+    try {
+        const raw = localStorage.getItem(LS_OFFSET_KEY);
+        const n = Number(raw);
+        return Number.isFinite(n) ? n : 0;
+    } catch {
+        return 0;
+    }
 }
 
 export function saveOffset(offset) {
-    localStorage.setItem(LS_OFFSET_KEY, String(offset));
+    try { localStorage.setItem(LS_OFFSET_KEY, String(offset)); } catch { }
 }
 
 // ── High-level sync helpers ────────────────────────────────────────────
