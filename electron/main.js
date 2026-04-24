@@ -557,12 +557,40 @@ function createWindow() {
             return;
         }
 
-        // Prefer real USB serial devices over generic motherboard/virtual COM ports.
-        const selected = portList.find((entry) => {
+        // Prefer likely external controller ports over generic motherboard UARTs.
+        const scorePort = (entry) => {
+            const name = String(entry?.portName || '').toLowerCase();
+            const display = String(entry?.displayName || '').toLowerCase();
             const vid = Number(entry?.usbVendorId);
             const pid = Number(entry?.usbProductId);
-            return Number.isFinite(vid) && vid > 0 && Number.isFinite(pid) && pid > 0;
-        }) || portList[0];
+
+            let score = 0;
+
+            // Strong signal: real USB VID/PID present.
+            if (Number.isFinite(vid) && vid > 0) score += 80;
+            if (Number.isFinite(pid) && pid > 0) score += 80;
+
+            // Linux/macOS USB-serial naming.
+            if (/ttyusb\d+/.test(name)) score += 140;
+            if (/ttyacm\d+/.test(name)) score += 120;
+            if (/cu\.usb|tty\.usb/.test(name)) score += 100;
+
+            // Windows COM ports are usually usable for adapters.
+            if (/^com\d+$/.test(name)) score += 80;
+
+            // De-prioritize common onboard/legacy UART names.
+            if (/ttys\d+/.test(name)) score -= 220;
+            if (/ttyama\d+/.test(name)) score -= 140;
+            if (/ttyprintk/.test(name)) score -= 300;
+
+            // Helpful labels from adapters/devices.
+            if (/usb|ch340|cp210|ftdi|arduino|stm32|esp32/.test(display)) score += 40;
+
+            return score;
+        };
+
+        const ranked = [...portList].sort((a, b) => scorePort(b) - scorePort(a));
+        const selected = ranked[0] || portList[0];
 
         try {
             console.log('[serial] select-serial-port candidates:', (portList || []).map((p) => ({
@@ -578,6 +606,7 @@ function createWindow() {
                 portId: selected?.portId || '',
                 usbVendorId: selected?.usbVendorId ?? null,
                 usbProductId: selected?.usbProductId ?? null,
+                score: scorePort(selected),
             });
         } catch { }
 

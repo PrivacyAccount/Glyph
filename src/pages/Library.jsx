@@ -131,6 +131,8 @@ function Library({ library, onLibraryUpdate, onBack, onPlay, onSeriesSelect, onO
     };
 
     const abortControllerRef = useRef(null);
+    const fetchDebounceTimerRef = useRef(null);
+    const fetchRunIdRef = useRef(0);
 
     useLayoutEffect(() => {
         setSearch(String(library?.initialSearch || ''));
@@ -286,6 +288,7 @@ function Library({ library, onLibraryUpdate, onBack, onPlay, onSeriesSelect, onO
 
     const fetchContent = useCallback(async () => {
         if (!library) { setLoading(false); return; }
+        const runId = ++fetchRunIdRef.current;
 
         // Cancel previous request
         if (abortControllerRef.current) {
@@ -294,6 +297,7 @@ function Library({ library, onLibraryUpdate, onBack, onPlay, onSeriesSelect, onO
         const controller = new AbortController();
         abortControllerRef.current = controller;
         const signal = controller.signal;
+        const canApply = () => !signal.aborted && fetchRunIdRef.current === runId;
 
         setLoading(true);
         try {
@@ -301,6 +305,7 @@ function Library({ library, onLibraryUpdate, onBack, onPlay, onSeriesSelect, onO
                 // Always fetch folders for sidebar stats
                 const resFolders = await fetch(`/api/libraries/${library.id}/folders`, { signal });
                 const folderList = await resFolders.json();
+                if (!canApply()) return;
                 setFolders(folderList);
                 setPosterVersionByFolderPath(() => {
                     const next = {};
@@ -323,7 +328,9 @@ function Library({ library, onLibraryUpdate, onBack, onPlay, onSeriesSelect, onO
                     if (queryFilters.sort) params.set('sort', queryFilters.sort);
                     if (queryFilters.sort) params.set('order', queryFilters.sortOrder);
                     const resVideos = await fetch(`/api/libraries/${library.id}/videos?${params}`, { signal });
-                    setVideos(await resVideos.json());
+                    const nextVideos = await resVideos.json();
+                    if (!canApply()) return;
+                    setVideos(nextVideos);
                 } else {
                     setVideos([]);
                 }
@@ -346,25 +353,39 @@ function Library({ library, onLibraryUpdate, onBack, onPlay, onSeriesSelect, onO
                     if (queryFilters.sort) params.set('sort', queryFilters.sort);
                     if (queryFilters.sort) params.set('order', queryFilters.sortOrder);
                     const res = await fetch(`/api/libraries/${library.id}/videos?${params}`, { signal });
-                    setVideos(await res.json());
+                    const nextVideos = await res.json();
+                    if (!canApply()) return;
+                    setVideos(nextVideos);
                     setFolders([]);
                 }
             }
             const extRes = await fetch(`/api/libraries/${library.id}/extensions`, { signal });
-            setExtensions(await extRes.json());
+            const nextExtensions = await extRes.json();
+            if (!canApply()) return;
+            setExtensions(nextExtensions);
         } catch (err) {
             if (err.name === 'AbortError') return;
             console.error('Failed to fetch:', err);
         } finally {
-            if (!signal.aborted) {
+            if (canApply()) {
                 setLoading(false);
             }
         }
     }, [library, queryFilters, search, isSeriesLib, isVrLib, videoTab]);
 
     useEffect(() => {
-        fetchContent();
+        if (fetchDebounceTimerRef.current) {
+            clearTimeout(fetchDebounceTimerRef.current);
+        }
+        fetchDebounceTimerRef.current = setTimeout(() => {
+            fetchDebounceTimerRef.current = null;
+            fetchContent();
+        }, 120);
         return () => {
+            if (fetchDebounceTimerRef.current) {
+                clearTimeout(fetchDebounceTimerRef.current);
+                fetchDebounceTimerRef.current = null;
+            }
             if (abortControllerRef.current) {
                 abortControllerRef.current.abort();
             }
