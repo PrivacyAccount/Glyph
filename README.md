@@ -1,3 +1,4 @@
+<p align="center"> <img align="center" width="640" height="360" alt="tv_banner_custom" src="https://github.com/user-attachments/assets/813d4959-625b-4bd4-a910-eb496ca8f52d" /></p>
 
 
 
@@ -7,7 +8,8 @@ Glyph is a local media platform for **Video / Series / VR libraries**, with buil
 Glyph combines **media library management** , **funscript workflows** , and **device-aware playback** in one consistent system. Instead of juggling multiple tools, you can manage metadata, tags, scripts, playlists, playback, and device controls in a single app with shared UX and history-aware manager tools.
 
 This software is **free** for everyone to download and use.
-I’ve also been creating Funscripts for some time, and if you’d like to support me, I’d really appreciate it. Your support helps me keep making more Funscripts :D . You can check out my Funscripts on my https://www.patreon.com/c/LooneyScripts
+I’ve also been creating Funscripts for some time, and if you’d like to support me, I’d really appreciate it. Your support helps me keep making more Funscripts :D . You can check out my Funscripts on my [Patreon](https://www.patreon.com/c/LooneyScripts)
+<p align="center"> <img width="1920" height="987" alt="Screenshot 2026-03-20 000410" src="https://github.com/user-attachments/assets/56d33bc2-ca57-42b7-8834-980817588ef2" /> </p>
 
 
 ## Features
