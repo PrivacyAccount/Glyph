@@ -549,7 +549,7 @@ function Settings({ onLibraryUpdate, onThemeChange, onLanguageChange }) {
     };
 
     const handleLanguageChange = async (nextLanguage) => {
-        const allowed = new Set(['de', 'en', 'es', 'ja', 'ru', 'ko']);
+        const allowed = new Set(['de', 'en', 'es', 'ja', 'ru', 'ko', 'zh']);
         const lang = allowed.has(nextLanguage) ? nextLanguage : 'en';
         setSettings(prev => ({ ...prev, language: lang }));
         setLanguage(lang);
@@ -1010,6 +1010,7 @@ function Settings({ onLibraryUpdate, onThemeChange, onLanguageChange }) {
                                 { value: 'ja', label: t('languageJapanese', 'Japanisch') },
                                 { value: 'ru', label: t('languageRussian', 'Russian') },
                                 { value: 'ko', label: t('languageKorean', 'Korean') },
+                                { value: 'zh', label: t('languageChinese', 'Chinesisch') },
                             ]}
                         />
                     </div>

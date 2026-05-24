@@ -557,7 +557,11 @@ function Library({ library, onLibraryUpdate, onBack, onPlay, onSeriesSelect, onO
                 return (aDur - bDur) * direction;
             });
         } else if (filters.sort === 'date') {
-            next.sort((a, b) => (Number(a?.modifiedAt || 0) - Number(b?.modifiedAt || 0)) * direction);
+            next.sort((a, b) => {
+                const dateA = Number(a?.createdAt || a?.modifiedAt || 0);
+                const dateB = Number(b?.createdAt || b?.modifiedAt || 0);
+                return (dateA - dateB) * direction;
+            });
         } else if (filters.sort === 'size') {
             next.sort((a, b) => (Number(a?.size || 0) - Number(b?.size || 0)) * direction);
         } else {

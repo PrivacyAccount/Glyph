@@ -150,7 +150,7 @@ const ALL_LIBRARY_ID = '__all_videos__';
 const TPDB_API_BASE = 'https://api.theporndb.net';
 const TPDB_WEB_BASE = 'https://theporndb.net';
 const STASHDB_API_BASE = 'https://stashdb.org/graphql';
-const UI_LANGS = new Set(['de', 'en', 'es', 'ja', 'ru', 'ko']);
+const UI_LANGS = new Set(['de', 'en', 'es', 'ja', 'ru', 'ko', 'zh']);
 
 const runtimeLogger = createRuntimeLogger(800);
 const addRuntimeLog = runtimeLogger.add;
@@ -173,6 +173,7 @@ const durationIndexQueue = [];
 const durationIndexQueued = new Set();
 let durationIndexRunning = 0;
 const DURATION_INDEX_CONCURRENCY = 3;
+const EMBEDDED_FUNSCRIPT_AXES_CACHE = new Map();
 
 function parsePositiveIntEnv(name, fallback) {
     const raw = String(process.env[name] || '').trim();
@@ -182,13 +183,127 @@ function parsePositiveIntEnv(name, fallback) {
     return Math.max(1, Math.floor(n));
 }
 
-function detectAxes(baseName, fileSet) {
+function normalizeFunscriptActions(actionsRaw) {
+    const src = Array.isArray(actionsRaw) ? actionsRaw : [];
+    return src
+        .map((entry) => ({
+            at: Number(entry?.at || 0),
+            pos: Number(entry?.pos || 0),
+        }))
+        .filter((entry) => Number.isFinite(entry.at) && Number.isFinite(entry.pos) && entry.at >= 0)
+        .sort((a, b) => a.at - b.at);
+}
+
+function tryCollectEmbeddedAxisIntoMap(byAxis, axisRaw, payloadRaw) {
+    const axis = normalizeFunscriptAxis(axisRaw);
+    if (axis === 'main') return;
+    const actions = normalizeFunscriptActions(payloadRaw);
+    if (!actions.length) return;
+    const prev = byAxis.get(axis) || [];
+    if (actions.length >= prev.length) {
+        byAxis.set(axis, actions);
+    }
+}
+
+function parseFunscriptDataByAxis(rawData) {
+    const raw = rawData && typeof rawData === 'object' ? rawData : {};
+    const byAxis = new Map();
+    const mainActions = normalizeFunscriptActions(raw?.actions);
+
+    if (raw?.actions && typeof raw.actions === 'object' && !Array.isArray(raw.actions)) {
+        for (const [key, value] of Object.entries(raw.actions)) {
+            tryCollectEmbeddedAxisIntoMap(byAxis, key, value);
+        }
+    }
+
+    for (const axis of MULTI_AXIS_SUFFIXES) {
+        tryCollectEmbeddedAxisIntoMap(byAxis, axis, raw?.[axis]);
+    }
+
+    if (raw?.tracks && typeof raw.tracks === 'object' && !Array.isArray(raw.tracks)) {
+        for (const [key, value] of Object.entries(raw.tracks)) {
+            if (Array.isArray(value)) {
+                tryCollectEmbeddedAxisIntoMap(byAxis, key, value);
+                continue;
+            }
+            if (value && typeof value === 'object') {
+                tryCollectEmbeddedAxisIntoMap(byAxis, key, value?.actions || value?.points);
+            }
+        }
+    }
+
+    if (raw?.channels && typeof raw.channels === 'object' && !Array.isArray(raw.channels)) {
+        for (const [key, value] of Object.entries(raw.channels)) {
+            if (Array.isArray(value)) {
+                tryCollectEmbeddedAxisIntoMap(byAxis, key, value);
+                continue;
+            }
+            if (value && typeof value === 'object') {
+                tryCollectEmbeddedAxisIntoMap(byAxis, key, value?.actions || value?.points || value?.data);
+            }
+        }
+    }
+
+    if (Array.isArray(raw?.axes)) {
+        for (const axisEntry of raw.axes) {
+            if (!axisEntry || typeof axisEntry !== 'object') continue;
+            const axisName = axisEntry.axis || axisEntry.name || axisEntry.id || axisEntry.key;
+            tryCollectEmbeddedAxisIntoMap(byAxis, axisName, axisEntry.actions || axisEntry.points || axisEntry.data);
+        }
+    }
+
+    const axisActions = {};
+    for (const [axis, actions] of byAxis.entries()) {
+        axisActions[axis] = actions;
+    }
+    return {
+        mainActions,
+        axisActions,
+        axes: Object.keys(axisActions),
+    };
+}
+
+function getEmbeddedAxesFromMainFunscript(scriptPath) {
+    const normalizedPath = path.normalize(String(scriptPath || '').trim());
+    if (!normalizedPath || !fs.existsSync(normalizedPath)) return [];
+    let stats = null;
+    try {
+        stats = fs.statSync(normalizedPath);
+    } catch {
+        return [];
+    }
+    const cacheKey = normalizedPath.toLowerCase();
+    const mtimeMs = Number(stats?.mtimeMs || 0);
+    const size = Number(stats?.size || 0);
+    const cached = EMBEDDED_FUNSCRIPT_AXES_CACHE.get(cacheKey);
+    if (cached && Number(cached.mtimeMs || 0) === mtimeMs && Number(cached.size || 0) === size) {
+        return Array.isArray(cached.axes) ? [...cached.axes] : [];
+    }
+    try {
+        const parsed = JSON.parse(fs.readFileSync(normalizedPath, 'utf-8'));
+        const detected = parseFunscriptDataByAxis(parsed);
+        const axes = Array.isArray(detected?.axes) ? detected.axes : [];
+        EMBEDDED_FUNSCRIPT_AXES_CACHE.set(cacheKey, { mtimeMs, size, axes });
+        return [...axes];
+    } catch {
+        EMBEDDED_FUNSCRIPT_AXES_CACHE.set(cacheKey, { mtimeMs, size, axes: [] });
+        return [];
+    }
+}
+
+function detectAxes(baseName, fileSet, directoryPath = '') {
     const mainFs = baseName + '.funscript';
     const hasFunscript = fileSet.has(mainFs);
     const axes = [];
     for (const axis of MULTI_AXIS_SUFFIXES) {
         if (fileSet.has(baseName + '.' + axis + '.funscript')) {
             axes.push(axis);
+        }
+    }
+    if (hasFunscript && directoryPath) {
+        const embeddedAxes = getEmbeddedAxesFromMainFunscript(path.join(directoryPath, mainFs));
+        for (const axis of embeddedAxes) {
+            if (!axes.includes(axis)) axes.push(axis);
         }
     }
     return {
@@ -1558,7 +1673,7 @@ function saveSettings(settings) {
         tpdbApiKey: settings.tpdbApiKey || '',
         stashdbApiKey: settings.stashdbApiKey || '',
         theme: settings.theme || {},
-        language: ['de', 'en', 'es', 'ja', 'ru', 'ko'].includes(String(settings.language || '').toLowerCase())
+        language: ['de', 'en', 'es', 'ja', 'ru', 'ko', 'zh'].includes(String(settings.language || '').toLowerCase())
             ? String(settings.language).toLowerCase()
             : 'en',
         watchFolders: settings.watchFolders === false ? false : true,
@@ -3636,9 +3751,53 @@ function scheduleWatchRescan(reason, libraryId = '') {
             return;
         }
 
-        console.log(`Watch change detected (${reasonLabel}), rescanning libraries...`);
-        addRuntimeLog('info', 'watch', 'Watch change detected, full rescan started', { reason: reasonLabel, affectedLibraries: pendingIds.length });
-        await scanAllLibraries();
+        const settings = loadSettings();
+        const librariesById = new Map((settings.libraries || []).map((lib) => [String(lib?.id || ''), lib]));
+        const uniquePendingIds = [...new Set(pendingIds.map((id) => String(id || '').trim()).filter(Boolean))]
+            .filter((id) => librariesById.has(id));
+        if (uniquePendingIds.length === 0) return;
+
+        const nowForCooldown = Date.now();
+        const readyIds = [];
+        let nextCooldownDelayMs = 0;
+        for (const id of uniquePendingIds) {
+            const cooldownUntil = Number(watchLibraryCooldownUntilMs.get(id) || 0);
+            if (cooldownUntil > nowForCooldown) {
+                watchPendingLibraryIds.add(id);
+                const waitMs = Math.max(350, cooldownUntil - nowForCooldown);
+                if (!nextCooldownDelayMs || waitMs < nextCooldownDelayMs) nextCooldownDelayMs = waitMs;
+                continue;
+            }
+            readyIds.push(id);
+        }
+
+        if (readyIds.length === 0) {
+            if (!watchDebounceTimer) {
+                watchDebounceTimer = setTimeout(() => scheduleWatchRescan('', ''), nextCooldownDelayMs || 1200);
+            }
+            return;
+        }
+
+        console.log(`Watch change detected (${reasonLabel}), rescanning ${readyIds.length} affected librar${readyIds.length === 1 ? 'y' : 'ies'}...`);
+        addRuntimeLog('info', 'watch', 'Watch change detected, targeted multi-library rescan started', {
+            reason: reasonLabel,
+            affectedLibraries: readyIds.length,
+        });
+        for (const id of readyIds) {
+            const lib = librariesById.get(id);
+            const libName = String(lib?.name || id);
+            try {
+                await scanLibraryById(id);
+                watchLibraryCooldownUntilMs.set(id, Date.now() + WATCH_LIBRARY_RESCAN_COOLDOWN_MS);
+            } catch (err) {
+                console.error(`Watch-triggered rescan failed for library "${libName}":`, err?.message || String(err));
+                addRuntimeLog('warn', 'watch', 'Watch-triggered targeted library rescan failed', {
+                    libraryId: id,
+                    libraryName: libName,
+                    error: err?.message || String(err),
+                });
+            }
+        }
     }, 1200);
 }
 
@@ -5075,6 +5234,13 @@ function registerVideo(video, targetIndex = videoIndex) {
     return video;
 }
 
+function getVideoDateSortValue(videoLike) {
+    const created = Number(videoLike?.createdAt || 0);
+    if (Number.isFinite(created) && created > 0) return created;
+    const modified = Number(videoLike?.modifiedAt || 0);
+    return Number.isFinite(modified) ? modified : 0;
+}
+
 function normalizeMediaPathKey(filePath) {
     return path.normalize(String(filePath || '')).toLowerCase();
 }
@@ -5505,12 +5671,13 @@ async function scanFlatVideosAsync(dirPath, videos = [], recursive = true, targe
                 if (!VIDEO_EXTENSIONS.includes(ext)) continue;
 
                 const baseName = path.basename(entry.name, ext);
-                const axisInfo = detectAxes(baseName, fileSet);
+                const axisInfo = detectAxes(baseName, fileSet, dirPath);
                 const vrMeta = buildVrMetaForVideo(baseName, fullPath, libraryType);
                 let stats;
                 try { stats = await fs.promises.stat(fullPath); } catch { stats = { size: 0, mtimeMs: Date.now() }; }
                 const sizeNum = Number(stats.size || 0);
                 const mtimeNum = Number(stats.mtimeMs || Date.now());
+                const createdNum = Number(stats.birthtimeMs || stats.ctimeMs || mtimeNum || Date.now());
                 const durationSec = Number(getIndexedDuration(fullPath, sizeNum, mtimeNum) || 0);
 
                 const videoTitle = (() => {
@@ -5525,6 +5692,7 @@ async function scanFlatVideosAsync(dirPath, videos = [], recursive = true, targe
                     directory: dirPath,
                     extension: ext,
                     size: sizeNum,
+                    createdAt: createdNum,
                     modifiedAt: mtimeNum,
                     hasFunscript: axisInfo.hasFunscript,
                     funscriptPath: axisInfo.funscriptFile ? path.join(dirPath, axisInfo.funscriptFile) : null,
@@ -7819,7 +7987,7 @@ app.get('/api/libraries/:id/videos', async (req, res) => {
             if (bKnown) return 1;
             return String(a?.title || '').localeCompare(String(b?.title || '')) * direction;
         });
-    } else if (sort === 'date') results.sort((a, b) => b.modifiedAt - a.modifiedAt);
+    } else if (sort === 'date') results.sort((a, b) => getVideoDateSortValue(b) - getVideoDateSortValue(a));
     else if (sort === 'size') results.sort((a, b) => b.size - a.size);
     else results.sort((a, b) => a.title.localeCompare(b.title));
 
@@ -7842,7 +8010,7 @@ app.get('/api/libraries/:id/videos', async (req, res) => {
         const effectiveVr = buildVrMetaForVideo(baseTitle, v?.filePath || '', v?.libraryType || 'videos');
         return {
             id: v.id, title: v.title, fileName: v.fileName, extension: v.extension,
-            size: v.size, modifiedAt: v.modifiedAt, hasFunscript: v.hasFunscript,
+            size: v.size, createdAt: Number(v.createdAt || 0), modifiedAt: v.modifiedAt, hasFunscript: v.hasFunscript,
             durationSec: Number(v.durationSec || 0),
             filePath: v.filePath,
             hasAudio: typeof v.hasAudio === 'boolean'
@@ -7881,7 +8049,7 @@ app.get('/api/libraries/:id/folders', (req, res) => {
 });
 
 // Browse library folder structure
-app.get('/api/libraries/:id/browse', (req, res) => {
+app.get('/api/libraries/:id/browse', async (req, res) => {
     if (String(req.params.id || '') === ALL_LIBRARY_ID) {
         return res.status(400).json({ error: 'Folder browse is not available for All videos library' });
     }
@@ -7897,79 +8065,92 @@ app.get('/api/libraries/:id/browse', (req, res) => {
         return res.status(403).json({ error: 'Access denied' });
     }
 
-    if (!fs.existsSync(normalizedReqPath)) return res.status(404).json({ error: 'Path not found' });
+    try {
+        await fs.promises.access(normalizedReqPath, fs.constants.F_OK);
+    } catch {
+        return res.status(404).json({ error: 'Path not found' });
+    }
 
     try {
-        const entries = fs.readdirSync(normalizedReqPath, { withFileTypes: true });
+        const entries = await fs.promises.readdir(normalizedReqPath, { withFileTypes: true });
         const fileSet = new Set(entries.map(e => e.name));
+        const shouldWarmThumbnails = String(req.query.warmThumbs || '').trim() === '1';
+        const thumbWarmLimit = 24;
+
+        const folderEntries = entries.filter((entry) => entry.isDirectory());
         const folders = [];
+        for (const entry of folderEntries) {
+            const fullPath = path.join(normalizedReqPath, entry.name);
+            let videoCount = 0;
+            try {
+                const subEntries = await fs.promises.readdir(fullPath, { withFileTypes: true });
+                videoCount = subEntries.filter(e => e.isFile() && VIDEO_EXTENSIONS.includes(path.extname(e.name).toLowerCase())).length;
+            } catch { }
+            folders.push({
+                name: entry.name,
+                path: fullPath,
+                videoCount,
+                hasPoster: hasPoster(fullPath),
+                tags: getFolderTags(fullPath),
+            });
+        }
+
+        const fileEntries = entries.filter((entry) => entry.isFile());
         const videos = [];
 
-        for (const entry of entries) {
+        for (const entry of fileEntries) {
             const fullPath = path.join(normalizedReqPath, entry.name);
-            if (entry.isDirectory()) {
-                // Count videos in subfolder
-                let videoCount = 0;
-                try {
-                    const subEntries = fs.readdirSync(fullPath, { withFileTypes: true });
-                    videoCount = subEntries.filter(e => e.isFile() && VIDEO_EXTENSIONS.includes(path.extname(e.name).toLowerCase())).length;
-                } catch { }
-                folders.push({
-                    name: entry.name,
-                    path: fullPath,
-                    videoCount,
-                    hasPoster: hasPoster(fullPath),
-                    tags: getFolderTags(fullPath),
-                });
-            } else if (entry.isFile()) {
-                const ext = path.extname(entry.name).toLowerCase();
-                if (VIDEO_EXTENSIONS.includes(ext)) {
-                    const baseName = path.basename(entry.name, ext);
-                    const axisInfo = detectAxes(baseName, fileSet);
-                    const vrMeta = buildVrMetaForVideo(baseName, fullPath, libType);
-                    let stats;
-                    try { stats = fs.statSync(fullPath); } catch { stats = { size: 0, mtimeMs: Date.now() }; }
+            const ext = path.extname(entry.name).toLowerCase();
+            if (VIDEO_EXTENSIONS.includes(ext)) {
+                const baseName = path.basename(entry.name, ext);
+                const axisInfo = detectAxes(baseName, fileSet, normalizedReqPath);
+                const vrMeta = buildVrMetaForVideo(baseName, fullPath, libType);
+                let stats;
+                try { stats = await fs.promises.stat(fullPath); } catch { stats = { size: 0, mtimeMs: Date.now() }; }
+                const createdAt = Number(stats?.birthtimeMs || stats?.ctimeMs || stats?.mtimeMs || Date.now());
 
-                    // Registering video here might be redundant if we don't want to pollute index with browse calls, 
-                    // but logic kept same as before.
-                    const savedTitle = String(tpdbVideoMetaByKey.get(normalizeVideoPathKey(fullPath))?.title || baseName || '');
-                    const video = registerVideo({
-                        id: generateStableId(fullPath), title: savedTitle, fileName: entry.name,
-                        filePath: fullPath, directory: normalizedReqPath, extension: ext,
-                        size: stats.size, modifiedAt: stats.mtimeMs,
-                        hasFunscript: axisInfo.hasFunscript,
-                        funscriptPath: axisInfo.funscriptFile ? path.join(normalizedReqPath, axisInfo.funscriptFile) : null,
-                        axes: axisInfo.axes, isMultiAxis: axisInfo.isMultiAxis,
-                        isVr: vrMeta.isVr,
-                        vrProjection: vrMeta.vrProjection,
-                        vrStereoMode: vrMeta.vrStereoMode,
-                        hasAudio: getIndexedHasAudio(fullPath, Number(stats.size || 0), Number(stats.mtimeMs || Date.now())),
-                        libraryType: libType,
-                        libraryId: library.id,
-                        tags: getVideoTags(fullPath),
-                    });
-                    applyTpdbMetaToVideoObject(video);
-                    enqueueAudioIndex(video);
-                    videos.push({
-                        id: video.id, name: entry.name, title: video?.title || baseName,
-                        path: fullPath, filePath: fullPath, size: stats.size,
-                        modifiedAt: Number(stats?.mtimeMs || Date.now()),
-                        extension: ext, hasFunscript: axisInfo.hasFunscript,
-                        libraryType: libType,
-                        libraryId: library.id,
-                        isVr: vrMeta.isVr,
-                        vrProjection: vrMeta.vrProjection,
-                        vrStereoMode: vrMeta.vrStereoMode,
-                        hasAudio: video?.hasAudio === true,
-                        hasThumbnail: hasAnyThumbForPath(fullPath),
-                        thumbVersion: getVideoThumbVersion(fullPath, Number(stats?.mtimeMs || Date.now())),
-                        axes: axisInfo.axes, isMultiAxis: axisInfo.isMultiAxis,
-                        tags: Array.isArray(video.tags) ? video.tags : [],
-                        performers: Array.isArray(video.performers) ? video.performers : [],
-                        isFavorite: getVideoIsFavorite(video, getVideoFolderMetadata(video)),
-                        tpdbItemType: String(video.tpdbItemType || ''),
-                        tpdbItemId: String(video.tpdbItemId || ''),
-                    });
+                // Registering video here might be redundant if we don't want to pollute index with browse calls,
+                // but logic kept same as before.
+                const savedTitle = String(tpdbVideoMetaByKey.get(normalizeVideoPathKey(fullPath))?.title || baseName || '');
+                const video = registerVideo({
+                    id: generateStableId(fullPath), title: savedTitle, fileName: entry.name,
+                    filePath: fullPath, directory: normalizedReqPath, extension: ext,
+                    size: stats.size, createdAt, modifiedAt: stats.mtimeMs,
+                    hasFunscript: axisInfo.hasFunscript,
+                    funscriptPath: axisInfo.funscriptFile ? path.join(normalizedReqPath, axisInfo.funscriptFile) : null,
+                    axes: axisInfo.axes, isMultiAxis: axisInfo.isMultiAxis,
+                    isVr: vrMeta.isVr,
+                    vrProjection: vrMeta.vrProjection,
+                    vrStereoMode: vrMeta.vrStereoMode,
+                    hasAudio: getIndexedHasAudio(fullPath, Number(stats.size || 0), Number(stats.mtimeMs || Date.now())),
+                    libraryType: libType,
+                    libraryId: library.id,
+                    tags: getVideoTags(fullPath),
+                });
+                applyTpdbMetaToVideoObject(video);
+                enqueueAudioIndex(video);
+                videos.push({
+                    id: video.id, name: entry.name, title: video?.title || baseName,
+                    path: fullPath, filePath: fullPath, size: stats.size,
+                    createdAt,
+                    modifiedAt: Number(stats?.mtimeMs || Date.now()),
+                    extension: ext, hasFunscript: axisInfo.hasFunscript,
+                    libraryType: libType,
+                    libraryId: library.id,
+                    isVr: vrMeta.isVr,
+                    vrProjection: vrMeta.vrProjection,
+                    vrStereoMode: vrMeta.vrStereoMode,
+                    hasAudio: video?.hasAudio === true,
+                    hasThumbnail: hasAnyThumbForPath(fullPath),
+                    thumbVersion: getVideoThumbVersion(fullPath, Number(stats?.mtimeMs || Date.now())),
+                    axes: axisInfo.axes, isMultiAxis: axisInfo.isMultiAxis,
+                    tags: Array.isArray(video.tags) ? video.tags : [],
+                    performers: Array.isArray(video.performers) ? video.performers : [],
+                    isFavorite: getVideoIsFavorite(video, getVideoFolderMetadata(video)),
+                    tpdbItemType: String(video.tpdbItemType || ''),
+                    tpdbItemId: String(video.tpdbItemId || ''),
+                });
+                if (shouldWarmThumbnails && videos.length <= thumbWarmLimit) {
                     generateThumbnail(fullPath);
                 }
             }
@@ -9509,15 +9690,22 @@ app.get('/api/videos/:id/funscript', (req, res) => {
         }
 
         // Fallback to filename-based detection when no explicit mappings exist.
+        const fallbackScriptPaths = {};
         if (video.funscriptPath && fs.existsSync(video.funscriptPath)) {
             const mainFs = JSON.parse(fs.readFileSync(video.funscriptPath, 'utf-8'));
-            if (Array.isArray(mainFs?.actions)) {
-                result.actions = mainFs.actions;
+            const parsed = parseFunscriptDataByAxis(mainFs);
+            if (Array.isArray(parsed?.mainActions) && parsed.mainActions.length > 0) {
+                result.actions = parsed.mainActions;
                 result.metadata.mainScriptPath = String(video.funscriptPath || '');
+            }
+            for (const axis of Object.keys(parsed?.axisActions || {})) {
+                const axisActions = parsed.axisActions[axis];
+                if (!Array.isArray(axisActions) || axisActions.length < 1) continue;
+                result[axis] = axisActions;
+                fallbackScriptPaths[axis] = String(video.funscriptPath);
             }
         }
 
-        const fallbackScriptPaths = {};
         if (video.isMultiAxis && Array.isArray(video.axes)) {
             for (const axis of video.axes) {
                 const axisPath = path.join(video.directory, `${video.title}.${axis}.funscript`);
@@ -9535,6 +9723,12 @@ app.get('/api/videos/:id/funscript', (req, res) => {
         }
         if (Object.keys(fallbackScriptPaths).length > 0) {
             result.metadata.scriptPaths = fallbackScriptPaths;
+        }
+
+        const loadedAxes = Object.keys(result).filter((key) => key !== 'metadata' && key !== 'actions');
+        if (loadedAxes.length > 0) {
+            result.metadata.axes = loadedAxes;
+            result.metadata.isMultiAxis = true;
         }
 
         if (!Array.isArray(result.actions) || result.actions.length === 0) {

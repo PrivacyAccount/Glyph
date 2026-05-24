@@ -198,7 +198,7 @@ function getServerDataCandidates() {
     return [path.join(__dirname, '..', 'server', 'data')];
 }
 
-const SUPPORTED_SPLASH_LANGS = new Set(['de', 'en', 'es', 'ja', 'ru', 'ko']);
+const SUPPORTED_SPLASH_LANGS = new Set(['de', 'en', 'es', 'ja', 'ru', 'ko', 'zh']);
 
 function normalizeSplashLanguage(lang) {
     const raw = String(lang || '').toLowerCase();

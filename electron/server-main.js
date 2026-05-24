@@ -14,7 +14,7 @@ let uiLang = 'en';
 function normalizeUiLanguage(lang) {
     const raw = String(lang || '').toLowerCase();
     const base = raw.split(/[-_]/)[0];
-    const supported = new Set(['de', 'en', 'es', 'ja', 'ru', 'ko']);
+    const supported = new Set(['de', 'en', 'es', 'ja', 'ru', 'ko', 'zh']);
     return supported.has(base) ? base : 'en';
 }
 
