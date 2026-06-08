@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { flushSync } from 'react-dom';
 import PlaylistPickerDialog from '../components/PlaylistPickerDialog';
 import VideoCard from '../components/VideoCard';

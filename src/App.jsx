@@ -1,4 +1,4 @@
-﻿import React, { Suspense, lazy, useState, useEffect } from 'react';
+import React, { Suspense, lazy, useState, useEffect } from 'react';
 import { HashRouter as Router, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import GlyphMark from './components/GlyphMark';
 import { useI18n } from './i18n';

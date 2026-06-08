@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import ContextMenu from './ContextMenu';
 import PropertiesDialog from './PropertiesDialog';
 import VideoCard from './VideoCard';

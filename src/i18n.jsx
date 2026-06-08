@@ -1,4 +1,4 @@
-﻿import React, { createContext, useContext, useMemo, useState } from 'react';
+import React, { createContext, useContext, useMemo, useState } from 'react';
 
 const translations = {
     de: {
@@ -313,6 +313,10 @@ const translations = {
         tpdbJav: 'JAV',
         tpdbQueryPlaceholder: 'Titel-Suche (Fallback, wenn Hash nichts findet)',
         metadataUrlPlaceholder: 'Oder URL einf\u00FCgen (StashDB Szene oder ThePornDB Szene/Film/JAV)',
+        fc2ProviderHint: 'Metadaten von adult.fc2.com parsen (Cloudflare-gesch\u00FCtzt)',
+        javpopProviderHint: 'Metadaten von javpop.com parsen (Cloudflare-gesch\u00FCtzt)',
+        fc2UrlPlaceholder: 'FC2-URL einf\u00FCgen (z.B. https://adult.fc2.com/content/...)',
+        javpopUrlPlaceholder: 'JAVPop-URL einf\u00FCgen (z.B. https://javpop.com/...)',
         selectSearchResult: 'Bitte zuerst ein Suchergebnis ausw\u00E4hlen.',
         searching: 'Suche...',
         performers: 'Performer',
@@ -997,6 +1001,10 @@ const translations = {
         tpdbJav: 'JAV',
         tpdbQueryPlaceholder: 'Title search (fallback if hash misses)',
         metadataUrlPlaceholder: 'Or paste URL (StashDB scene or ThePornDB scene/movie/jav)',
+        fc2ProviderHint: 'Parse metadata from adult.fc2.com (Cloudflare protected)',
+        javpopProviderHint: 'Parse metadata from javpop.com (Cloudflare protected)',
+        fc2UrlPlaceholder: 'Paste FC2 content URL (e.g., https://adult.fc2.com/content/...)',
+        javpopUrlPlaceholder: 'Paste JAVPop post URL (e.g., https://javpop.com/...)',
         selectSearchResult: 'Please select a search result first.',
         searching: 'Searching...',
         performers: 'Performers',

@@ -1,52 +1,42 @@
-import { useEffect, useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { useI18n } from '../i18n';
-import useDialogHotkeys from '../hooks/useDialogHotkeys';
 
 function PlaylistManageDialog({ mode = 'rename', playlistName = '', onCancel, onConfirm }) {
     const { t } = useI18n();
-    const [name, setName] = useState(String(playlistName || ''));
-    const [submitting, setSubmitting] = useState(false);
-
-    useEffect(() => {
-        setName(String(playlistName || ''));
-    }, [playlistName]);
+    const [name, setName] = useState(playlistName);
+    const [saving, setSaving] = useState(false);
 
     const isRename = mode === 'rename';
-    const title = isRename
-        ? t('renamePlaylist', 'Playlist umbenennen')
-        : t('deletePlaylist', 'Playlist löschen');
-
-    const canSubmit = useMemo(() => {
-        if (!isRename) return true;
-        const next = String(name || '').trim();
-        const current = String(playlistName || '').trim();
-        return next.length > 0 && next !== current;
-    }, [isRename, name, playlistName]);
+    const isDelete = mode === 'delete';
 
     const handleSubmit = async () => {
-        if (submitting || !canSubmit) return;
-        setSubmitting(true);
+        if (saving) return;
+        if (isRename && !name.trim()) return;
+        setSaving(true);
         try {
-            const payload = isRename ? { name: String(name || '').trim() } : {};
-            await Promise.resolve(onConfirm?.(payload));
+            await onConfirm?.({ name: name.trim() });
         } finally {
-            setSubmitting(false);
+            setSaving(false);
         }
     };
 
-    useDialogHotkeys({
-        open: true,
-        onCancel,
-        onConfirm: handleSubmit,
-        canConfirm: !submitting && canSubmit,
-        allowEnterInInputs: true,
-    });
+    const handleKeyDown = (e) => {
+        if (e.key === 'Enter' && !saving) {
+            e.preventDefault();
+            handleSubmit();
+        }
+        if (e.key === 'Escape') {
+            onCancel?.();
+        }
+    };
 
     return (
         <div className="modal-overlay" onClick={onCancel}>
-            <div className="modal playlist-manage-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal" onClick={(e) => e.stopPropagation()} onKeyDown={handleKeyDown}>
                 <div className="modal-header">
-                    <h2 className="modal-title">{title}</h2>
+                    <h2 className="modal-title">
+                        {isRename ? t('renamePlaylist', 'Playlist umbenennen') : t('deletePlaylist', 'Playlist lÃ¶schen')}
+                    </h2>
                     <button className="modal-close" onClick={onCancel}>
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                             <line x1="18" y1="6" x2="6" y2="18" />
@@ -56,33 +46,34 @@ function PlaylistManageDialog({ mode = 'rename', playlistName = '', onCancel, on
                 </div>
                 <div className="modal-body">
                     {isRename ? (
-                        <div className="playlist-manage-field">
+                        <div className="playlist-dialog-section">
                             <div className="playlist-dialog-label">{t('playlistName', 'Playlist-Name')}</div>
-                            <div className="playlist-dialog-input-row">
-                                <input
-                                    autoFocus
-                                    type="text"
-                                    value={name}
-                                    onChange={(e) => setName(e.target.value)}
-                                    placeholder={t('playlistNamePlaceholder', 'Playlist-Name')}
-                                />
-                            </div>
+                            <input
+                                type="text"
+                                value={name}
+                                onChange={(e) => setName(e.target.value)}
+                                placeholder={t('playlistNamePlaceholder', 'Playlist-Name')}
+                                autoFocus
+                            />
                         </div>
                     ) : (
-                        <div className="playlist-manage-warning">
-                            {t('deletePlaylistConfirm', 'Playlist löschen?')}
-                            <strong>{playlistName}</strong>
+                        <div className="playlist-dialog-hint">
+                            {t('confirmDeletePlaylist', 'MÃ¶chten Sie die Playlist "{name}" wirklich lÃ¶schen?').replace('{name}', playlistName)}
                         </div>
                     )}
                 </div>
                 <div className="modal-footer">
                     <button className="btn btn-secondary" onClick={onCancel}>{t('cancel', 'Abbrechen')}</button>
                     <button
-                        className={`btn ${isRename ? 'btn-primary' : 'btn-danger'}`}
+                        className={`btn ${isDelete ? 'btn-danger' : 'btn-primary'}`}
                         onClick={handleSubmit}
-                        disabled={!canSubmit || submitting}
+                        disabled={saving || (isRename && !name.trim())}
                     >
-                        {isRename ? t('save', 'Speichern') : t('delete', 'Löschen')}
+                        {saving
+                            ? t('saving', 'Speichere...')
+                            : isRename
+                                ? t('rename', 'Umbenennen')
+                                : t('delete', 'LÃ¶schen')}
                     </button>
                 </div>
             </div>
@@ -91,4 +82,3 @@ function PlaylistManageDialog({ mode = 'rename', playlistName = '', onCancel, on
 }
 
 export default PlaylistManageDialog;
-

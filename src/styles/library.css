@@ -1,4 +1,4 @@
-﻿/* Extracted Library styles from index.css */
+/* Extracted Library styles from index.css */
 
 
 .library-layout {
@@ -1470,6 +1470,51 @@
 
 .tpdb-item-provider-badge--tpdb {
   border-color: color-mix(in oklab, var(--accent-secondary) 28%, var(--border-subtle));
+}
+
+.tpdb-item-provider-badge--fc2 {
+  border-color: color-mix(in oklab, #ff6b35 28%, var(--border-subtle));
+  color: color-mix(in oklab, #ff6b35 80%, var(--text-primary));
+}
+
+.tpdb-item-provider-badge--javpop {
+  border-color: color-mix(in oklab, #e91e63 28%, var(--border-subtle));
+  color: color-mix(in oklab, #e91e63 80%, var(--text-primary));
+}
+
+.scraper-modal {
+  max-width: min(900px, 94vw);
+}
+
+.scraper-provider-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.scraper-provider-tab {
+  padding: 8px 16px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.scraper-provider-tab:hover {
+  border-color: var(--border-default);
+  color: var(--text-primary);
+}
+
+.scraper-provider-tab.active {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  background: color-mix(in oklab, var(--accent-primary) 12%, var(--bg-card));
 }
 
 .tpdb-performer-images-modal {

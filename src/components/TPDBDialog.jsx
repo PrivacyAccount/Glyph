@@ -1,4 +1,4 @@
-﻿import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useI18n } from '../i18n';
 
 function TPDBDialog({ video, onClose, onApplied }) {
