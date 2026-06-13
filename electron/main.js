@@ -94,6 +94,9 @@ let playerLaunchContext = null;
 let playerWindowCurrentVideoId = null;
 let mpvLoadingFile = false;
 let currentApiBase = 'http://localhost:4000';
+let currentApiCredentials = null;
+let useSSL = false;
+let currentAdress = null;
 
 function getServerAddressPath() {
     return path.join(app.getPath('userData'), 'server-address.json');
@@ -103,19 +106,42 @@ function loadServerAddress() {
     try {
         const data = JSON.parse(fs.readFileSync(getServerAddressPath(), 'utf8'));
         if (typeof data.address === 'string' && data.address.trim()) {
-            return data.address.trim();
+            currentAdress = data.address.trim();
+            if (typeof data.useSSL === 'boolean') useSSL = data.useSSL;
+            if (data.username || data.password) {
+                currentApiCredentials = {
+                    username: String(data.username || ''),
+                    password: String(data.password || ''),
+                };
+            }
+            return currentAdress;
         }
     } catch { }
     return 'localhost:4000';
 }
 
-function saveServerAddress(address) {
+function saveServerSettings(settings) {
     try {
-        fs.writeFileSync(getServerAddressPath(), JSON.stringify({ address }), 'utf8');
+        fs.writeFileSync(getServerAddressPath(), JSON.stringify(settings), 'utf8');
     } catch (err) {
         console.error('Failed to save server address:', err);
     }
 }
+
+// Adds Suport for htaccess, pass user:password@host:port
+function parseAddressAndCredentials(addr) {
+    const stripped = String(addr || '').trim().replace(/^https?:\/\//i, '');
+    try {
+        const parsed = new URL(`http://${stripped}`);
+        const username = parsed.username ? decodeURIComponent(parsed.username) : '';
+        const password = parsed.password ? decodeURIComponent(parsed.password) : '';
+        const host = parsed.host || 'localhost:4000';
+        return { host, credentials: (username || password) ? { username, password } : null };
+    } catch {
+        return { host: stripped || 'localhost:4000', credentials: null };
+    }
+}
+
 let mpvSessionId = 0;
 let suppressNextMpvStopUntil = 0;
 
@@ -499,8 +525,13 @@ function createWindow() {
     const startUrl = isDev ? 'http://localhost:5173' : `file://${path.join(__dirname, '..', 'dist', 'index.html')}`;
     rendererBaseUrl = startUrl;
     const savedAddr = loadServerAddress();
-    currentApiBase = `http://${savedAddr}`;
-    const apiPrefix = `${currentApiBase}/api/`;
+    const { host: savedHost, credentials: savedCreds } = parseAddressAndCredentials(savedAddr);
+    const urlPrefix = useSSL ? 'https://' : 'http://';
+    currentApiBase = `${urlPrefix}${savedHost}`;
+    if (!currentApiCredentials && savedCreds) currentApiCredentials = savedCreds;
+    const apiPrefix = currentApiCredentials
+        ? `${urlPrefix}${encodeURIComponent(currentApiCredentials.username)}:${encodeURIComponent(currentApiCredentials.password)}@${savedHost}/api/`
+        : `${currentApiBase}/api/`;
 
     // In packaged mode we load file:// UI, so "/api/..." would otherwise resolve to file:///api/...
     // Redirect those requests to the external Glyph Server.
@@ -529,6 +560,21 @@ function createWindow() {
                     }
                 } catch { }
                 callback({});
+            });
+            ses.webRequest.onBeforeSendHeaders((details, callback) => {
+                if (currentApiCredentials) {
+                    const reqUrl = String(details?.url || '');
+                    try {
+                        const reqParsed = new URL(reqUrl);
+                        const baseParsed = new URL(currentApiBase);
+                        if (reqParsed.hostname === baseParsed.hostname && reqParsed.port === baseParsed.port) {
+                            const encoded = Buffer.from(`${currentApiCredentials.username}:${currentApiCredentials.password}`).toString('base64');
+                            callback({ requestHeaders: { ...details.requestHeaders, 'Authorization': `Basic ${encoded}` } });
+                            return;
+                        }
+                    } catch { }
+                }
+                callback({ requestHeaders: details.requestHeaders });
             });
         } catch (err) {
             console.error('Failed to install API request redirect:', err);
@@ -683,6 +729,8 @@ function createWindow() {
 
         // Poll for Server Readiness (robust check)
         const http = require('http');
+        const https = require('https');
+        const requester = apiPrefix.startsWith('https://') ? https : http;
         const waitForServer = async (maxRetries = 20, delayMs = 500) => {
             let ready = false;
             let retries = 0;
@@ -690,7 +738,7 @@ function createWindow() {
                 updateStatus(`${splashText.waitingServer} (${retries + 1}/${maxRetries})`);
                 await new Promise(resolve => {
                     try {
-                        const req = http.get(`${apiPrefix}settings`, (res) => {
+                        const req = requester.get(`${apiPrefix}settings`, { rejectUnauthorized: false }, (res) => {
                             if (res.statusCode === 200) ready = true;
                             resolve();
                         });
@@ -730,7 +778,7 @@ function createWindow() {
 
         while (scanning && scanRetries < 60) {
             await new Promise(resolve => {
-                const req = http.get(`${apiPrefix}status`, (res) => {
+                const req = requester.get(`${apiPrefix}status`, (res) => {
                     let data = '';
                     res.on('data', chunk => data += chunk);
                     res.on('end', () => {
@@ -972,9 +1020,31 @@ ipcMain.handle('set-titlebar-theme', async (_event, mode) => {
 
 ipcMain.handle('set-server-address', async (_event, address) => {
     const addr = String(address || '').trim() || 'localhost:4000';
-    saveServerAddress(addr);
-    currentApiBase = `http://${addr}`;
+    currentAdress = addr;
+    saveServerSettings({ address: addr, useSSL, username: currentApiCredentials?.username || '', password: currentApiCredentials?.password || '' });
+    const { host: newHost, credentials: newCreds } = parseAddressAndCredentials(addr);
+    const proto = useSSL ? 'https://' : 'http://';
+    currentApiBase = `${proto}${newHost}`;
+    if (!currentApiCredentials && newCreds) currentApiCredentials = newCreds;
     return { ok: true, address: addr };
+});
+
+ipcMain.handle('set-use-ssl', async (_event, newUseSSL) => {
+    useSSL = Boolean(newUseSSL);
+    const addr = currentAdress || loadServerAddress();
+    const { host } = parseAddressAndCredentials(addr);
+    currentApiBase = `${useSSL ? 'https://' : 'http://'}${host}`;
+    saveServerSettings({ address: addr, useSSL, username: currentApiCredentials?.username || '', password: currentApiCredentials?.password || '' });
+    return { ok: true };
+});
+
+ipcMain.handle('set-server-credentials', async (_event, username, password) => {
+    const addr = currentAdress || loadServerAddress();
+    currentApiCredentials = (username || password)
+        ? { username: String(username || ''), password: String(password || '') }
+        : null;
+    saveServerSettings({ address: addr, useSSL, username: String(username || ''), password: String(password || '') });
+    return { ok: true };
 });
 
 ipcMain.handle('open-external-url', async (_event, rawUrl) => {

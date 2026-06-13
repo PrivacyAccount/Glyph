@@ -51,6 +51,9 @@ function Settings({ onLibraryUpdate, onThemeChange, onLanguageChange }) {
         showTimelineGraph: false,
         separatePlayerWindow: false,
         serverAddress: 'localhost:4000',
+        useSSL: false,
+        serverUsername: '',
+        serverPassword: '',
         playerAutoFullscreen: false,
         thumbfastEnabled: true,
         showPerformerChips: true,
@@ -77,6 +80,8 @@ function Settings({ onLibraryUpdate, onThemeChange, onLanguageChange }) {
     const [backupBusy, setBackupBusy] = useState('');
     const [backupConfirmDialog, setBackupConfirmDialog] = useState(null);
     const [showAllHeresphereUrls, setShowAllHeresphereUrls] = useState(false);
+    const [expertSettingsOpen, setExpertSettingsOpen] = useState(false);
+    const expertInitRef = useRef(false);
     const [systemFonts, setSystemFonts] = useState(STANDARD_SUBTITLE_FONTS);
     const [appVersion, setAppVersion] = useState('');
     const [draggingSettingsLibraryId, setDraggingSettingsLibraryId] = useState('');
@@ -86,6 +91,14 @@ function Settings({ onLibraryUpdate, onThemeChange, onLanguageChange }) {
     const settingsLibrariesRef = useRef([]);
     const libraryHoldTimerRef = useRef(null);
     const libraryDragStateRef = useRef(null);
+
+    useEffect(() => {
+        if (expertInitRef.current) return;
+        if (settings.useSSL === true || settings.serverUsername || settings.serverPassword) {
+            expertInitRef.current = true;
+            setExpertSettingsOpen(true);
+        }
+    }, [settings.useSSL, settings.serverUsername, settings.serverPassword]);
 
     useEffect(() => {
         fetchSettings();
@@ -322,6 +335,9 @@ function Settings({ onLibraryUpdate, onThemeChange, onLanguageChange }) {
                 serverAddress: typeof local.serverAddress === 'string' && local.serverAddress
                     ? local.serverAddress
                     : 'localhost:4000',
+                useSSL: typeof local.useSSL === 'boolean' ? local.useSSL : false,
+                serverUsername: typeof local.serverUsername === 'string' ? local.serverUsername : '',
+                serverPassword: typeof local.serverPassword === 'string' ? local.serverPassword : '',
                 playerAutoFullscreen: typeof local.playerAutoFullscreen === 'boolean'
                     ? local.playerAutoFullscreen
                     : false,
@@ -340,7 +356,13 @@ function Settings({ onLibraryUpdate, onThemeChange, onLanguageChange }) {
             try {
                 const local = JSON.parse(localStorage.getItem('glyph_settings') || '{}');
                 if (local.serverAddress) {
-                    setSettings(prev => ({ ...prev, serverAddress: local.serverAddress }));
+                    setSettings(prev => ({
+                        ...prev,
+                        serverAddress: local.serverAddress,
+                        useSSL: typeof local.useSSL === 'boolean' ? local.useSSL : prev.useSSL,
+                        serverUsername: local.serverUsername || prev.serverUsername,
+                        serverPassword: local.serverPassword || prev.serverPassword,
+                    }));
                 }
             } catch { }
             showToast(t('settingsLoadError', 'Einstellungen konnten nicht geladen werden'), 'error');
@@ -2066,6 +2088,85 @@ function Settings({ onLibraryUpdate, onThemeChange, onLanguageChange }) {
                             >
                                 {t('saveLabel', 'Speichern')}
                             </button>
+                        </div>
+                        <div style={{ marginTop: '16px', borderTop: '1px solid var(--border-subtle)' }}>
+                            <button
+                                onClick={() => setExpertSettingsOpen(v => !v)}
+                                style={{
+                                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                                    width: '100%', background: 'none', border: 'none', cursor: 'pointer',
+                                    padding: '12px 0', color: 'var(--text-primary)',
+                                }}
+                            >
+                                <span style={{ fontSize: '14px', fontWeight: 500 }}>{t('expertSettings', 'Experteneinstellungen')}</span>
+                                <span style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'inline-block', transition: 'transform 0.2s', transform: expertSettingsOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}>▼</span>
+                            </button>
+                            {expertSettingsOpen && (
+                                <div style={{ paddingBottom: '8px' }}>
+                                    <div className="settings-input-row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <div style={{ marginBottom: '4px' }}>
+                                            <div style={{ fontSize: '14px', color: 'var(--text-primary)', fontWeight: 500 }}>{t('enableSSHToggle', 'SSL aktivieren')}</div>
+                                            <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>{t('enableSSHToggleHint', 'Aktiviert SSL für die Verbindung zu einem Server.')}</div>
+                                        </div>
+                                        <label className="settings-switch">
+                                            <input
+                                                type="checkbox"
+                                                checked={settings.useSSL === true}
+                                                onChange={(e) => {
+                                                    const val = e.target.checked;
+                                                    setSettings({ ...settings, useSSL: val });
+                                                    const currentLocal = JSON.parse(localStorage.getItem('glyph_settings') || '{}');
+                                                    localStorage.setItem('glyph_settings', JSON.stringify({ ...currentLocal, useSSL: val }));
+                                                    if (window.electronAPI?.setUseSSL) window.electronAPI.setUseSSL(val);
+                                                    showToast(t('useSSLChanged', 'SSL-Einstellung gespeichert. App neu starten.'), 'success');
+                                                }}
+                                            />
+                                            <span className="settings-switch-track"><span className="settings-switch-thumb" /></span>
+                                        </label>
+                                    </div>
+                                    <div style={{ marginTop: '12px' }}>
+                                        <div style={{ fontSize: '14px', color: 'var(--text-primary)', fontWeight: 500, marginBottom: '4px' }}>{t('serverCredentialsTitle', 'HTTP Basic Auth')}</div>
+                                        <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '8px' }}>{t('serverCredentialsDesc', 'Zugangsdaten für htaccess-geschützte Server.')}</div>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                            <input
+                                                type="text"
+                                                className="add-library-name"
+                                                value={settings.serverUsername ?? ''}
+                                                onChange={(e) => setSettings({ ...settings, serverUsername: e.target.value })}
+                                                placeholder={t('usernamePlaceholder', 'Benutzername')}
+                                                style={{ maxWidth: '280px' }}
+                                                autoComplete="off"
+                                            />
+                                            <input
+                                                type="password"
+                                                className="add-library-name"
+                                                value={settings.serverPassword ?? ''}
+                                                onChange={(e) => setSettings({ ...settings, serverPassword: e.target.value })}
+                                                placeholder={t('passwordPlaceholder', 'Passwort')}
+                                                style={{ maxWidth: '280px' }}
+                                                autoComplete="new-password"
+                                            />
+                                            <div>
+                                                <button
+                                                    className="btn btn-secondary"
+                                                    style={{ padding: '7px 14px', fontSize: '12px', marginTop: '4px' }}
+                                                    onClick={() => {
+                                                        const u = (settings.serverUsername || '').trim();
+                                                        const p = settings.serverPassword || '';
+                                                        setSettings({ ...settings, serverUsername: u, serverPassword: p });
+                                                        const currentLocal = JSON.parse(localStorage.getItem('glyph_settings') || '{}');
+                                                        localStorage.setItem('glyph_settings', JSON.stringify({ ...currentLocal, serverUsername: u, serverPassword: p }));
+                                                        if (window.electronAPI?.setServerCredentials) window.electronAPI.setServerCredentials(u, p);
+                                                        showToast(t('credentialsSaved', 'Zugangsdaten gespeichert. App neu starten.'), 'success');
+                                                    }}
+                                                >
+                                                    {t('saveLabel', 'Speichern')}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>

@@ -21,6 +21,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     installSystemFont: () => ipcRenderer.invoke('install-system-font'),
     setTitlebarTheme: (theme) => ipcRenderer.invoke('set-titlebar-theme', theme),
     setServerAddress: (address) => ipcRenderer.invoke('set-server-address', address),
+    setUseSSL: (useSSL) => ipcRenderer.invoke('set-use-ssl', useSSL),
+    setServerCredentials: (username, password) => ipcRenderer.invoke('set-server-credentials', username, password),
     rendererReady: () => ipcRenderer.send('renderer-ready'),
     emitDeviceSyncEvent: (payload) => ipcRenderer.send('relay-device-sync-event', payload),
     onDeviceSyncEvent: (callback) => {
