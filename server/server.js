@@ -7927,7 +7927,8 @@ app.post('/api/funscripts/upload', (req, res) => {
     if (!safeName.toLowerCase().endsWith('.funscript')) return res.status(400).json({ error: 'Only .funscript files allowed' });
     const targetDir = path.resolve(String(dir));
     const targetPath = path.join(targetDir, safeName);
-    if (!targetPath.startsWith(targetDir + path.sep) && targetPath !== targetDir) return res.status(400).json({ error: 'Invalid path' });
+    const rel = path.relative(targetDir, targetPath);
+    if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return res.status(400).json({ error: 'Invalid path' });
     try {
         if (!fs.existsSync(targetDir)) return res.status(400).json({ error: 'Target directory does not exist' });
         fs.writeFileSync(targetPath, String(content), 'utf8');

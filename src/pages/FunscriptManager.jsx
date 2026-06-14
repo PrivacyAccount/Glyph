@@ -409,15 +409,15 @@ function FunscriptManager({ onOpenVideoInLibrary }) {
                 reader.onerror = reject;
                 reader.readAsText(file);
             });
-            JSON.parse(content);
+            try { JSON.parse(content); } catch { throw new Error('File is not valid JSON / funscript'); }
             const targetDir = fsBrowserPath || '/';
             const res = await fetch('/api/funscripts/upload', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ name: file.name, dir: targetDir, content }),
             });
-            if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Upload failed');
-            const data = await res.json();
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.error || 'Upload failed');
             setLinkDraft((prev) => ({ ...prev, scriptPath: data.path }));
             await loadFsBrowserDir(targetDir);
             showToast(`${t('uploaded', 'Uploaded')}: ${data.name}`, 'success');
