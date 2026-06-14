@@ -2,6 +2,8 @@ const { app, BrowserWindow, ipcMain, dialog, shell, nativeImage, session } = req
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
+const http = require('http');
+const https = require('https');
 const MpvController = require('./mpvController');
 
 let mpv = new MpvController();
@@ -1252,6 +1254,32 @@ ipcMain.handle('get-system-fonts', async () => {
 
 // ── MPV IPC Handlers ──
 
+function fetchVideoTitle(videoId) {
+    return new Promise((resolve, reject) => {
+        const base = String(currentApiBase || 'http://localhost:4000').replace(/\/+$/, '');
+        const url = `${base}/api/videos/${encodeURIComponent(videoId)}/meta`;
+        const requester = url.startsWith('https') ? https : http;
+        const headers = {};
+        if (currentApiCredentials?.username || currentApiCredentials?.password) {
+            const token = Buffer.from(`${currentApiCredentials.username}:${currentApiCredentials.password}`).toString('base64');
+            headers.Authorization = `Basic ${token}`;
+        }
+        const req = requester.get(url, { headers, rejectUnauthorized: false, timeout: 3000 }, (res) => {
+            let raw = '';
+            res.on('data', (chunk) => { raw += chunk; });
+            res.on('end', () => {
+                try {
+                    const data = JSON.parse(raw);
+                    resolve(data.title || null);
+                } catch { resolve(null); }
+            });
+        });
+        req.on('error', reject);
+        req.on('timeout', () => { try { req.destroy(); } catch { } reject(new Error('timeout')); });
+        req.end();
+    });
+}
+
 ipcMain.handle('mpv-load-file', async (event, filePath, options = {}) => {
     try {
         const callerWindow = BrowserWindow.fromWebContents(event.sender) || mainWindow;
@@ -1259,6 +1287,18 @@ ipcMain.handle('mpv-load-file', async (event, filePath, options = {}) => {
         mpvClientWindow = callerWindow;
         mpvLoadingFile = true;
         mpvSessionId++;
+
+        if (currentApiCredentials) {
+            options.apiCredentials = currentApiCredentials;
+        }
+
+        if (!options.title) {
+            const videoIdMatch = String(options.videoId || filePath || '').match(/\/api\/videos\/([^/]+)\//);
+            const videoId = options.videoId || (videoIdMatch ? videoIdMatch[1] : null);
+            if (videoId) {
+                options.title = await fetchVideoTitle(videoId).catch(() => null);
+            }
+        }
 
         // Keep only the real MPV surface visible while playback is active.
         // - in-app mode: hide main renderer window

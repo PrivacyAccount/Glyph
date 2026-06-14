@@ -22,6 +22,8 @@ Full heatmap workflow (cards, seekbar, previews), multi-axis handling, and saved
 Assign and manage multiple scripts on a single video, including per-axis mapping and default selection behavior.
 * **Dedicated Funscript Manager**  
 A full manager with search/filter, mapping tools, history, and undo so script workflows stay clean and traceable.
+* **Remote Server Support**  
+Connect the Electron client to a remote Glyph server. Library mode is auto-detected, the server-side file browser is shown in place of local pickers, and MPV streams video over HTTP with correct video titles and optional Basic Auth.
 * **Dedicated Playlist Manager**  
 Create, copy, rename, merge, delete, reorder, and review playlist history in one centralized workflow.
 * **Modern MPV Playback Stack**  

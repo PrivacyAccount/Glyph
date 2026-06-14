@@ -291,12 +291,23 @@ function AppContent() {
             separatePlayerWindow = local?.separatePlayerWindow === true;
         }
 
+        //this opens in browser rn -> need to fix to open in vlc or simmilar -> more settings?
         if (playerType === 'external') {
             if (!window.electronAPI?.openVideo) {
                 console.error('External player selected but electronAPI.openVideo is unavailable.');
                 return;
             }
-            const videoPath = video?.filePath || video?.path || null;
+            let videoPath = video?.filePath || video?.path || null;
+            try {
+                const localSettings = JSON.parse(localStorage.getItem('glyph_settings') || '{}');
+                const addr = String(localSettings?.serverAddress || '').trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+                const host = (addr.split('/')[0].split(':')[0].replace(/^\[|\]$/g, '') || '').toLowerCase();
+                const isRemote = !!addr && host !== 'localhost' && host !== '127.0.0.1' && host !== '::1' && host !== '';
+                if (isRemote && video?.id) {
+                    const protocol = localSettings?.useSSL ? 'https' : 'http';
+                    videoPath = `${protocol}://${addr}/api/videos/${encodeURIComponent(video.id)}/direct`;
+                }
+            } catch { }
             if (!videoPath) {
                 console.error('External player: missing video path on item:', video);
                 return;

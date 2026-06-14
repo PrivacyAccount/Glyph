@@ -66,6 +66,14 @@ function Settings({ onLibraryUpdate, onThemeChange, onLanguageChange }) {
     const [toast, setToast] = useState(null);
     const [newLibName, setNewLibName] = useState('');
     const [newLibType, setNewLibType] = useState('videos');
+    const [remoteLibMode, setRemoteLibMode] = useState(false);
+    const [remoteLibPath, setRemoteLibPath] = useState('');
+    const [serverBrowserOpen, setServerBrowserOpen] = useState(false);
+    const [serverBrowserPath, setServerBrowserPath] = useState('/');
+    const [serverBrowserDirs, setServerBrowserDirs] = useState([]);
+    const [serverBrowserParent, setServerBrowserParent] = useState(null);
+    const [serverBrowserLoading, setServerBrowserLoading] = useState(false);
+    const [serverBrowserError, setServerBrowserError] = useState('');
     const [removeLibraryDialog, setRemoveLibraryDialog] = useState(null);
     const [removeLibraryDeleteGenerated, setRemoveLibraryDeleteGenerated] = useState(false);
     const [activePanel, setActivePanel] = useState('language');
@@ -99,6 +107,16 @@ function Settings({ onLibraryUpdate, onThemeChange, onLanguageChange }) {
             setExpertSettingsOpen(true);
         }
     }, [settings.useSSL, settings.serverUsername, settings.serverPassword]);
+
+    const isRemoteServer = useMemo(() => {
+        const addr = String(settings.serverAddress || '').trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+        const host = (addr.split('/')[0].split(':')[0].replace(/^\[|\]$/g, '') || '').toLowerCase();
+        return !!addr && host !== 'localhost' && host !== '127.0.0.1' && host !== '::1' && host !== '';
+    }, [settings.serverAddress]);
+
+    useEffect(() => {
+        if (isRemoteServer) setRemoteLibMode(true);
+    }, [isRemoteServer]);
 
     useEffect(() => {
         fetchSettings();
@@ -398,6 +416,51 @@ function Settings({ onLibraryUpdate, onThemeChange, onLanguageChange }) {
             await fetchSettings();
             if (onLibraryUpdate) onLibraryUpdate();
             setNewLibName('');
+            showToast(`"${name}" ${t('addedSuffix', 'hinzugefuegt')}`, 'success');
+        } catch (err) {
+            showToast(t('errorPrefix', 'Fehler: ') + err.message, 'error');
+        }
+    };
+
+    const loadServerBrowserDir = async (dirPath) => {
+        setServerBrowserLoading(true);
+        setServerBrowserError('');
+        try {
+            const res = await fetch(`/api/fs/list?path=${encodeURIComponent(dirPath || '/')}`);
+            if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.statusText);
+            const data = await res.json();
+            setServerBrowserPath(data.path);
+            setServerBrowserDirs(data.dirs || []);
+            setServerBrowserParent(data.parent);
+        } catch (err) {
+            setServerBrowserError(err.message);
+        } finally {
+            setServerBrowserLoading(false);
+        }
+    };
+
+    const handleAddRemoteLibrary = async () => {
+        const cleanPath = remoteLibPath.trim();
+        if (!cleanPath) {
+            showToast(t('remotePathRequired', 'Bitte einen Pfad eingeben'), 'error');
+            return;
+        }
+        const name = newLibName.trim() || cleanPath.split('/').filter(Boolean).pop() || t('settingsDefaultLibrary', 'Bibliothek');
+        try {
+            const res = await fetch('/api/libraries', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, path: cleanPath, type: newLibType }),
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err.error || t('settingsServerError', 'Server-Fehler'));
+            }
+            await fetchSettings();
+            if (onLibraryUpdate) onLibraryUpdate();
+            setNewLibName('');
+            setRemoteLibPath('');
+            setServerBrowserOpen(false);
             showToast(`"${name}" ${t('addedSuffix', 'hinzugefuegt')}`, 'success');
         } catch (err) {
             showToast(t('errorPrefix', 'Fehler: ') + err.message, 'error');
@@ -1297,13 +1360,82 @@ function Settings({ onLibraryUpdate, onThemeChange, onLanguageChange }) {
                             ]}
                         />
                         <div className="add-library-buttons">
-                            <button className="btn btn-primary" onClick={() => handleAddLibrary()}>
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
-                                    <line x1="12" y1="5" x2="12" y2="19" />
-                                    <line x1="5" y1="12" x2="19" y2="12" />
-                                </svg>
-                                {t('chooseFolder', 'Ordner waehlen')}
-                            </button>
+                            {!isRemoteServer && (
+                                <div style={{ display: 'flex', gap: '4px', width: '100%', marginBottom: '6px' }}>
+                                    <button
+                                        className={`btn ${!remoteLibMode ? 'btn-primary' : 'btn-secondary'}`}
+                                        style={{ flex: 1, fontSize: '12px', padding: '5px 8px' }}
+                                        onClick={() => { setRemoteLibMode(false); setServerBrowserOpen(false); }}
+                                    >{t('localFolder', 'Local Folder')}</button>
+                                    <button
+                                        className={`btn ${remoteLibMode ? 'btn-primary' : 'btn-secondary'}`}
+                                        style={{ flex: 1, fontSize: '12px', padding: '5px 8px' }}
+                                        onClick={() => { if (!remoteLibMode) { setRemoteLibMode(true); loadServerBrowserDir('/'); setServerBrowserOpen(true); } }}
+                                    >{t('serverPath', 'Server Path')}</button>
+                                </div>
+                            )}
+                            {!remoteLibMode ? (
+                                <button className="btn btn-primary" onClick={() => handleAddLibrary()}>
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
+                                        <line x1="12" y1="5" x2="12" y2="19" />
+                                        <line x1="5" y1="12" x2="19" y2="12" />
+                                    </svg>
+                                    {t('chooseFolder', 'Ordner waehlen')}
+                                </button>
+                            ) : (
+                                <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                                        <input
+                                            type="text"
+                                            className="add-library-name"
+                                            style={{ flex: 1 }}
+                                            value={remoteLibPath}
+                                            onChange={(e) => { setRemoteLibPath(e.target.value); setServerBrowserOpen(false); }}
+                                            onKeyDown={(e) => { if (e.key === 'Enter' && remoteLibPath.trim()) { loadServerBrowserDir(remoteLibPath); setServerBrowserOpen(true); } }}
+                                            placeholder="/mnt/media"
+                                        />
+                                        <button
+                                            className="btn btn-secondary"
+                                            style={{ padding: '6px 10px', fontSize: '12px', whiteSpace: 'nowrap' }}
+                                            onClick={() => { if (!serverBrowserOpen) loadServerBrowserDir(remoteLibPath || '/'); setServerBrowserOpen(v => !v); }}
+                                        >{t('browse', 'Browse')}</button>
+                                        <button
+                                            className="btn btn-primary"
+                                            style={{ padding: '6px 10px', fontSize: '12px', whiteSpace: 'nowrap' }}
+                                            onClick={handleAddRemoteLibrary}
+                                        >+ {t('add', 'Add')}</button>
+                                    </div>
+                                    {serverBrowserOpen && (
+                                        <div style={{ border: '1px solid var(--border-subtle)', borderRadius: '6px', maxHeight: '180px', overflow: 'auto', background: 'var(--bg-card)' }}>
+                                            <div style={{ padding: '4px 8px', borderBottom: '1px solid var(--border-subtle)', fontSize: '11px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px', position: 'sticky', top: 0, background: 'var(--bg-card)', zIndex: 1 }}>
+                                                {serverBrowserParent !== null && (
+                                                    <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent-primary)', fontSize: '14px', padding: '0 4px', lineHeight: 1 }}
+                                                        onClick={() => { loadServerBrowserDir(serverBrowserParent); setRemoteLibPath(serverBrowserParent); }}
+                                                        title={t('goUp', 'Go up')}>↑</button>
+                                                )}
+                                                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{serverBrowserPath}</span>
+                                                <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: '12px', padding: '0 4px', lineHeight: 1 }}
+                                                    onClick={() => setServerBrowserOpen(false)}>✕</button>
+                                            </div>
+                                            {serverBrowserLoading ? (
+                                                <div style={{ padding: '8px 12px', color: 'var(--text-secondary)', fontSize: '12px' }}>{t('loading', 'Laden...')}</div>
+                                            ) : serverBrowserError ? (
+                                                <div style={{ padding: '8px 12px', color: '#ef4444', fontSize: '12px' }}>{serverBrowserError}</div>
+                                            ) : serverBrowserDirs.length === 0 ? (
+                                                <div style={{ padding: '8px 12px', color: 'var(--text-secondary)', fontSize: '12px' }}>{t('noSubdirectories', 'Keine Unterordner')}</div>
+                                            ) : serverBrowserDirs.map(d => (
+                                                <div
+                                                    key={d.path}
+                                                    style={{ padding: '5px 12px', cursor: 'pointer', fontSize: '12px', color: 'var(--text-primary)', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', gap: '6px' }}
+                                                    onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover, rgba(255,255,255,0.05))'}
+                                                    onMouseLeave={e => e.currentTarget.style.background = ''}
+                                                    onClick={() => { loadServerBrowserDir(d.path); setRemoteLibPath(d.path); }}
+                                                >📁 {d.name}</div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     </div>
 

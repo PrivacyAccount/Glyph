@@ -36,6 +36,23 @@ function FunscriptManager({ onOpenVideoInLibrary }) {
     const sentinelRef = useRef(null);
     const loadRequestRef = useRef(0);
 
+    const isRemote = useMemo(() => {
+        try {
+            const s = JSON.parse(localStorage.getItem('glyph_settings') || '{}');
+            const addr = String(s?.serverAddress || '').trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+            const host = (addr.split('/')[0].split(':')[0].replace(/^\[|\]$/g, '') || '').toLowerCase();
+            return !!addr && host !== 'localhost' && host !== '127.0.0.1' && host !== '::1' && host !== '';
+        } catch { return false; }
+    }, []);
+
+    const [fsBrowserOpen, setFsBrowserOpen] = useState(false);
+    const [fsBrowserPath, setFsBrowserPath] = useState('/');
+    const [fsBrowserDirs, setFsBrowserDirs] = useState([]);
+    const [fsBrowserFiles, setFsBrowserFiles] = useState([]);
+    const [fsBrowserParent, setFsBrowserParent] = useState(null);
+    const [fsBrowserLoading, setFsBrowserLoading] = useState(false);
+    const [fsBrowserError, setFsBrowserError] = useState('');
+
     const showToast = (message, type = 'success') => {
         setToast({ message, type });
         setTimeout(() => setToast(null), 2600);
@@ -360,6 +377,57 @@ function FunscriptManager({ onOpenVideoInLibrary }) {
         }
     };
 
+    const loadFsBrowserDir = async (dirPath) => {
+        setFsBrowserLoading(true);
+        setFsBrowserError('');
+        try {
+            const res = await fetch(`/api/fs/list?path=${encodeURIComponent(dirPath || '/')}&showFiles=1&ext=funscript,json`);
+            if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.statusText);
+            const data = await res.json();
+            setFsBrowserPath(data.path);
+            setFsBrowserDirs(data.dirs || []);
+            setFsBrowserFiles(data.files || []);
+            setFsBrowserParent(data.parent);
+        } catch (err) {
+            setFsBrowserError(err.message);
+        } finally {
+            setFsBrowserLoading(false);
+        }
+    };
+
+    const handleUploadFunscript = async (file) => {
+        if (!file) return;
+        if (!file.name.toLowerCase().endsWith('.funscript')) {
+            showToast(t('onlyFunscriptAllowed', 'Only .funscript files allowed'), 'error');
+            return;
+        }
+        setBusyAction('upload');
+        try {
+            const content = await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => resolve(e.target.result);
+                reader.onerror = reject;
+                reader.readAsText(file);
+            });
+            JSON.parse(content);
+            const targetDir = fsBrowserPath || '/';
+            const res = await fetch('/api/funscripts/upload', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: file.name, dir: targetDir, content }),
+            });
+            if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Upload failed');
+            const data = await res.json();
+            setLinkDraft((prev) => ({ ...prev, scriptPath: data.path }));
+            await loadFsBrowserDir(targetDir);
+            showToast(`${t('uploaded', 'Uploaded')}: ${data.name}`, 'success');
+        } catch (err) {
+            showToast(`${t('uploadFailed', 'Upload failed')}: ${err.message}`, 'error');
+        } finally {
+            setBusyAction('');
+        }
+    };
+
     useDialogHotkeys({
         open: !!activeItem,
         onCancel: () => setManageVideoId(''),
@@ -650,18 +718,85 @@ function FunscriptManager({ onOpenVideoInLibrary }) {
                                 <div className="funscript-link-grid">
                                     <div className="funscript-link-block">
                                         <div className="funscript-link-block-label">{t('path', 'Path')}</div>
-                                        <div className="settings-input-row funscript-link-path-row">
-                                            <div className="funscript-picked-path" title={linkDraft.scriptPath || ''}>
-                                                {linkDraft.scriptPath || t('funscriptManagerNoFileSelected', 'No script selected')}
+                                        {isRemote ? (
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', width: '100%' }}>
+                                                <div className="settings-input-row funscript-link-path-row">
+                                                    <input
+                                                        type="text"
+                                                        className="add-library-name"
+                                                        style={{ flex: 1 }}
+                                                        value={linkDraft.scriptPath}
+                                                        onChange={(e) => setLinkDraft((prev) => ({ ...prev, scriptPath: e.target.value }))}
+                                                        onKeyDown={(e) => { if (e.key === 'Enter' && linkDraft.scriptPath.trim()) { const d = linkDraft.scriptPath.trim().replace(/[^/\\]*$/, '').replace(/[/\\]$/, '') || '/'; loadFsBrowserDir(d); setFsBrowserOpen(true); } }}
+                                                        placeholder="/mnt/media/scripts/video.funscript"
+                                                    />
+                                                    <button
+                                                        className="btn btn-secondary"
+                                                        type="button"
+                                                        style={{ whiteSpace: 'nowrap' }}
+                                                        onClick={() => { if (!fsBrowserOpen) loadFsBrowserDir(fsBrowserPath || '/'); setFsBrowserOpen((v) => !v); }}
+                                                    >{t('browse', 'Browse')}</button>
+                                                    <label
+                                                        className="btn btn-secondary"
+                                                        style={{ whiteSpace: 'nowrap', cursor: busyAction === 'upload' ? 'wait' : 'pointer', opacity: busyAction === 'upload' ? 0.6 : 1 }}
+                                                        title={`${t('uploadTo', 'Upload to')}: ${fsBrowserPath || '/'}`}
+                                                    >
+                                                        {busyAction === 'upload' ? '...' : t('upload', 'Upload')}
+                                                        <input type="file" accept=".funscript" style={{ display: 'none' }} disabled={busyAction === 'upload'} onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) handleUploadFunscript(f); }} />
+                                                    </label>
+                                                </div>
+                                                {fsBrowserOpen && (
+                                                    <div style={{ border: '1px solid var(--border-subtle)', borderRadius: '6px', maxHeight: '180px', overflow: 'auto', background: 'var(--bg-card)' }}>
+                                                        <div style={{ padding: '4px 8px', borderBottom: '1px solid var(--border-subtle)', fontSize: '11px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px', position: 'sticky', top: 0, background: 'var(--bg-card)', zIndex: 1 }}>
+                                                            {fsBrowserParent !== null && (
+                                                                <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent-primary)', fontSize: '14px', padding: '0 4px', lineHeight: 1 }}
+                                                                    onClick={() => loadFsBrowserDir(fsBrowserParent)} title={t('goUp', 'Go up')}>↑</button>
+                                                            )}
+                                                            <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{fsBrowserPath}</span>
+                                                            <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: '12px', padding: '0 4px', lineHeight: 1 }}
+                                                                onClick={() => setFsBrowserOpen(false)}>✕</button>
+                                                        </div>
+                                                        {fsBrowserLoading ? (
+                                                            <div style={{ padding: '8px 12px', color: 'var(--text-secondary)', fontSize: '12px' }}>{t('loading', 'Laden...')}</div>
+                                                        ) : fsBrowserError ? (
+                                                            <div style={{ padding: '8px 12px', color: '#ef4444', fontSize: '12px' }}>{fsBrowserError}</div>
+                                                        ) : (
+                                                            <>
+                                                                {fsBrowserDirs.map((d) => (
+                                                                    <div key={d.path} style={{ padding: '5px 12px', cursor: 'pointer', fontSize: '12px', color: 'var(--text-primary)', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', gap: '6px' }}
+                                                                        onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover, rgba(255,255,255,0.05))'}
+                                                                        onMouseLeave={(e) => e.currentTarget.style.background = ''}
+                                                                        onClick={() => loadFsBrowserDir(d.path)}>📁 {d.name}</div>
+                                                                ))}
+                                                                {fsBrowserFiles.length === 0 && fsBrowserDirs.length === 0 && (
+                                                                    <div style={{ padding: '8px 12px', color: 'var(--text-secondary)', fontSize: '12px' }}>{t('noFunscriptsFound', 'No funscripts found')}</div>
+                                                                )}
+                                                                {fsBrowserFiles.map((f) => (
+                                                                    <div key={f.path} style={{ padding: '5px 12px', cursor: 'pointer', fontSize: '12px', color: 'var(--accent-primary)', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 500 }}
+                                                                        onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover, rgba(255,255,255,0.05))'}
+                                                                        onMouseLeave={(e) => e.currentTarget.style.background = ''}
+                                                                        onClick={() => { setLinkDraft((prev) => ({ ...prev, scriptPath: f.path })); setFsBrowserOpen(false); }}>📄 {f.name}</div>
+                                                                ))}
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                )}
+                                                {fsBrowserPath && fsBrowserPath !== '/' && (
+                                                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                                                        {t('uploadDestination', 'Upload destination')}: <code style={{ fontSize: '11px' }}>{fsBrowserPath}</code>
+                                                    </div>
+                                                )}
                                             </div>
-                                            <button
-                                                className="btn btn-secondary"
-                                                type="button"
-                                                onClick={pickScriptFile}
-                                            >
-                                                {t('browse', 'Browse')}
-                                            </button>
-                                        </div>
+                                        ) : (
+                                            <div className="settings-input-row funscript-link-path-row">
+                                                <div className="funscript-picked-path" title={linkDraft.scriptPath || ''}>
+                                                    {linkDraft.scriptPath || t('funscriptManagerNoFileSelected', 'No script selected')}
+                                                </div>
+                                                <button className="btn btn-secondary" type="button" onClick={pickScriptFile}>
+                                                    {t('browse', 'Browse')}
+                                                </button>
+                                            </div>
+                                        )}
                                     </div>
                                     <div className="funscript-link-block">
                                         <div className="funscript-link-block-label">{t('funscriptManagerAddMapping', 'Add mapping')}</div>

@@ -167,12 +167,14 @@ const audioIndexStore = new Map(); // key(normalized path) -> { size, mtimeMs, h
 const audioIndexQueue = [];
 const audioIndexQueued = new Set();
 let audioIndexRunning = 0;
-const AUDIO_INDEX_CONCURRENCY = 8;
+const DEFAULT_AUDIO_CONCURRENCY = Math.max(1, Math.min(4, Math.ceil((os.cpus()?.length || 2) / 2)));
+const AUDIO_INDEX_CONCURRENCY = parsePositiveIntEnv('GLYPH_AUDIO_CONCURRENCY', DEFAULT_AUDIO_CONCURRENCY);
 const durationIndexStore = new Map(); // key(normalized path) -> { size, mtimeMs, durationSec, checkedAt }
 const durationIndexQueue = [];
 const durationIndexQueued = new Set();
 let durationIndexRunning = 0;
-const DURATION_INDEX_CONCURRENCY = 3;
+const DEFAULT_DURATION_CONCURRENCY = Math.max(1, Math.min(2, Math.ceil((os.cpus()?.length || 2) / 2)));
+const DURATION_INDEX_CONCURRENCY = parsePositiveIntEnv('GLYPH_DURATION_CONCURRENCY', DEFAULT_DURATION_CONCURRENCY);
 const EMBEDDED_FUNSCRIPT_AXES_CACHE = new Map();
 
 function parsePositiveIntEnv(name, fallback) {
@@ -7885,6 +7887,56 @@ app.get('/api/playlists/:id/videos', (req, res) => {
     }
 });
 // Libraries list
+app.get('/api/fs/list', (req, res) => {
+    const reqPath = String(req.query.path || '/').trim() || '/';
+    const showFiles = req.query.showFiles === '1';
+    const extFilter = showFiles && req.query.ext
+        ? String(req.query.ext).split(',').map(e => e.trim().toLowerCase()).filter(Boolean)
+        : [];
+    let normalized;
+    try {
+        normalized = path.resolve(reqPath);
+    } catch {
+        return res.status(400).json({ error: 'Invalid path' });
+    }
+    try {
+        const entries = fs.readdirSync(normalized, { withFileTypes: true });
+        const dirs = entries
+            .filter(e => { try { return e.isDirectory(); } catch { return false; } })
+            .map(e => ({ name: e.name, path: path.join(normalized, e.name) }))
+            .sort((a, b) => a.name.localeCompare(b.name));
+        let files = [];
+        if (showFiles) {
+            files = entries
+                .filter(e => { try { return e.isFile(); } catch { return false; } })
+                .filter(e => extFilter.length === 0 || extFilter.some(ext => e.name.toLowerCase().endsWith(`.${ext}`)))
+                .map(e => ({ name: e.name, path: path.join(normalized, e.name) }))
+                .sort((a, b) => a.name.localeCompare(b.name));
+        }
+        const parent = path.dirname(normalized);
+        res.json({ path: normalized, parent: parent !== normalized ? parent : null, dirs, files });
+    } catch (err) {
+        res.status(400).json({ error: err.message });
+    }
+});
+
+app.post('/api/funscripts/upload', (req, res) => {
+    const { name, dir, content } = req.body;
+    if (!name || !dir || content === undefined) return res.status(400).json({ error: 'Missing name, dir, or content' });
+    const safeName = path.basename(String(name));
+    if (!safeName.toLowerCase().endsWith('.funscript')) return res.status(400).json({ error: 'Only .funscript files allowed' });
+    const targetDir = path.resolve(String(dir));
+    const targetPath = path.join(targetDir, safeName);
+    if (!targetPath.startsWith(targetDir + path.sep) && targetPath !== targetDir) return res.status(400).json({ error: 'Invalid path' });
+    try {
+        if (!fs.existsSync(targetDir)) return res.status(400).json({ error: 'Target directory does not exist' });
+        fs.writeFileSync(targetPath, String(content), 'utf8');
+        res.json({ path: targetPath, name: safeName });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 app.get('/api/libraries', (req, res) => {
     const settings = loadSettings();
     const libs = settings.libraries.map(lib => {
@@ -8846,6 +8898,9 @@ app.get('/api/videos/:id/direct', (req, res) => {
         '.mpg': 'video/mpeg',
     };
     const contentType = mimeByExt[ext] || 'application/octet-stream';
+
+    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(video.title)}"`);
+
     return streamVideoFileWithRange(filePath, req, res, contentType);
 });
 
@@ -9505,6 +9560,12 @@ app.get('/api/videos/:id/path', (req, res) => {
     res.status(404).json({ error: 'Video not found' });
 });
 
+app.get('/api/videos/:id/meta', (req, res) => {
+    const video = videoIndex[req.params.id];
+    if (!video) return res.status(404).json({ error: 'Video not found' });
+    res.json({ title: video.title || '', filePath: video.filePath || '' });
+});
+
 app.get('/api/videos/:id/vr-meta', (req, res) => {
     const video = videoIndex[req.params.id];
     if (!video) return res.status(404).json({ error: 'Video not found' });
@@ -9624,6 +9685,17 @@ app.get('/api/videos/:id/details', (req, res) => {
             res.status(500).json({ error: 'Failed to parse probe data' });
         }
     });
+});
+
+app.get('/api/videos/:id/funscript/mappings', (req, res) => {
+    const video = videoIndex[req.params.id];
+    if (!video) return res.status(404).json({ error: 'Not found' });
+    try {
+        const mappings = listFunscriptMappings(video.id);
+        res.json({ mappings });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // GET funscript data
@@ -9988,22 +10060,24 @@ function autoLinkFunscriptsForLibrary(libraryId = '', options = {}) {
         for (const video of videos) {
             const detected = detectFunscriptCandidatesForVideo(video);
             const beforeCount = Number(listFunscriptMappings(String(video.id)).length || 0);
-            deleteByVideo.run(String(video.id));
-            const firstPerAxis = new Set();
-            for (const item of detected) {
-                const axis = normalizeFunscriptAxis(item.axis);
-                const isDefault = !firstPerAxis.has(axis);
-                if (isDefault) firstPerAxis.add(axis);
-                upsertFunscriptMapping({
-                    videoId: String(video.id),
-                    scriptPath: item.scriptPath,
-                    axis,
-                    label: item.label || '',
-                    isDefault,
-                    enabled: true,
-                    offsetMs: 0,
-                });
-                linkedScripts += 1;
+            if (detected.length > 0) {
+                deleteByVideo.run(String(video.id));
+                const firstPerAxis = new Set();
+                for (const item of detected) {
+                    const axis = normalizeFunscriptAxis(item.axis);
+                    const isDefault = !firstPerAxis.has(axis);
+                    if (isDefault) firstPerAxis.add(axis);
+                    upsertFunscriptMapping({
+                        videoId: String(video.id),
+                        scriptPath: item.scriptPath,
+                        axis,
+                        label: item.label || '',
+                        isDefault,
+                        enabled: true,
+                        offsetMs: 0,
+                    });
+                    linkedScripts += 1;
+                }
             }
             const afterCount = Number(detected.length || 0);
             if (beforeCount !== afterCount || afterCount > 0) changedVideos += 1;
