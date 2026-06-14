@@ -169,6 +169,17 @@ class MpvController {
             `--geometry=${bounds.width}x${bounds.height}+${bounds.x}+${bounds.y}`
         ];
 
+        if (options.apiCredentials && options.apiCredentials.username && options.apiCredentials.password) {
+            const username = options.apiCredentials.username;
+            const password = options.apiCredentials.password;
+            const token = Buffer.from(`${username}:${password}`).toString('base64');
+            args.push(`--http-header-fields=Authorization: Basic ${token}`);
+        }
+
+        if (options.title) {
+            args.push(`--force-media-title=${options.title}`);
+        }
+
         // On Unix sockets, remove stale endpoint from prior crashes.
         if (process.platform !== 'win32') {
             try {
