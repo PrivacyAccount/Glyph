@@ -1,4 +1,4 @@
-﻿import React, { useMemo, useState, useEffect, useRef } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { flushSync } from 'react-dom';
 import { useI18n } from '../i18n';
 import { setContinueWatchingEnabled } from '../services/watchProgress';

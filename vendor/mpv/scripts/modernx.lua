@@ -1,4 +1,4 @@
-﻿-- mpv-osc-modern by maoiscat
+-- mpv-osc-modern by maoiscat
 -- email:valarmor@163.com
 -- https://github.com/maoiscat/mpv-osc-modern
 

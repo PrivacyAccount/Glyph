@@ -1,4 +1,4 @@
-﻿const express = require('express');
+const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
@@ -12107,6 +12107,314 @@ app.get('/api/libraries/:id/performers/:performerId', async (req, res) => {
             error: String(err?.message || err || ''),
         });
         return res.status(500).json({ error: err?.message || 'Failed to load performer detail' });
+    }
+});
+
+// === Scraper API endpoints (FC2, JAVPop) ===
+const scrapers = require('./scrapers');
+
+app.post('/api/scraper/fc2/search', async (req, res) => {
+    try {
+        const query = String(req.body?.query || '').trim();
+        const urlInput = String(req.body?.url || '').trim();
+        if (!query && !urlInput) {
+            return res.status(400).json({ error: 'Missing query or url' });
+        }
+
+        addRuntimeLog('info', 'scraper', 'FC2 search requested', {
+            queryLength: query.length,
+            hasUrl: !!urlInput,
+        });
+
+        // Direct URL mode
+        if (urlInput) {
+            const parsed = scrapers.parseFc2Url(urlInput);
+            if (!parsed) {
+                return res.status(400).json({ error: 'Invalid FC2 URL' });
+            }
+            const detail = await scrapers.scrapeFc2Content(urlInput);
+            if (!detail || !detail.title) {
+                return res.status(404).json({ error: 'FC2 content not found' });
+            }
+            const normalized = scrapers.normalizeFc2Result(detail);
+            addRuntimeLog('info', 'scraper', 'FC2 content scraped by URL', {
+                title: String(normalized?.title || ''),
+            });
+            return res.json({ success: true, mode: 'url', provider: 'fc2', results: [normalized] });
+        }
+
+        // Search mode
+        const searchResults = await scrapers.searchFc2(query);
+        const normalized = searchResults.map(r => ({
+            ...scrapers.normalizeFc2Result(r),
+            title: r.title || '',
+            thumbUrl: r.thumbUrl || '',
+            date: r.date || '',
+        }));
+
+        addRuntimeLog('info', 'scraper', 'FC2 search completed', {
+            query,
+            resultCount: normalized.length,
+        });
+
+        res.json({ success: true, mode: 'search', provider: 'fc2', results: normalized });
+    } catch (err) {
+        addRuntimeLog('error', 'scraper', 'FC2 search failed', {
+            error: String(err?.message || err || ''),
+        });
+        res.status(500).json({ error: err?.message || 'FC2 search failed' });
+    }
+});
+
+app.post('/api/scraper/fc2/apply', async (req, res) => {
+    try {
+        const videoId = String(req.body?.videoId || '').trim();
+        const urlInput = String(req.body?.url || '').trim();
+        const video = videoIndex[videoId];
+        if (!video?.filePath) {
+            return res.status(404).json({ error: 'Video not found' });
+        }
+
+        addRuntimeLog('info', 'scraper', 'FC2 apply requested', {
+            videoId,
+            hasUrl: !!urlInput,
+        });
+
+        if (!urlInput) {
+            return res.status(400).json({ error: 'Missing URL for FC2 apply' });
+        }
+
+        const detail = await scrapers.scrapeFc2Content(urlInput);
+        if (!detail || !detail.title) {
+            return res.status(404).json({ error: 'FC2 content not found' });
+        }
+
+        const normalized = scrapers.normalizeFc2Result(detail);
+
+        const meta = setTpdbVideoMetadata(video.filePath, {
+            itemType: 'fc2',
+            itemId: normalized.id || '',
+            sourceUrl: normalized.sourceUrl || '',
+            title: normalized.title || video.title || '',
+            description: normalized.description || '',
+            releaseDate: normalized.date || '',
+            siteName: normalized.siteName || 'FC2',
+            posterUrl: normalized.posterUrl || '',
+            thumbUrl: normalized.thumbUrl || '',
+            raw: { ...normalized.raw, _glyphProvider: 'fc2' },
+        });
+
+        const performerRefs = [];
+        for (const perf of (normalized.performers || [])) {
+            const perfName = typeof perf === 'string' ? perf : perf?.name;
+            if (perfName) {
+                const saved = setTpdbPerformer({
+                    id: `name:${perfName.toLowerCase()}`,
+                    name: perfName,
+                });
+                if (saved?.id) performerRefs.push(saved);
+            }
+        }
+        setTpdbVideoPerformers(video.filePath, performerRefs);
+
+        // Download thumbnail
+        const thumbPath = getTpdbThumbPath(video.filePath);
+        const thumbCandidate = normalized.thumbUrl || normalized.posterUrl || '';
+        let thumbnailUpdated = false;
+        if (thumbCandidate) {
+            try {
+                if (fs.existsSync(thumbPath)) fs.rmSync(thumbPath, { force: true });
+                await downloadImageToFile(thumbCandidate, thumbPath);
+                thumbnailUpdated = hasValidThumbFile(thumbPath);
+                if (thumbnailUpdated) {
+                    writeThumbSource(thumbPath, `fc2:${thumbCandidate}`);
+                }
+            } catch (err) {
+                addRuntimeLog('warn', 'scraper', 'FC2 thumbnail download failed', {
+                    error: String(err?.message || ''),
+                });
+            }
+        }
+
+        syncTpdbVideoMetaIntoCaches(video.filePath);
+        refreshVrMetaForPath(video.filePath);
+
+        addRuntimeLog('info', 'scraper', 'FC2 apply completed', {
+            videoId,
+            title: String(normalized?.title || ''),
+            thumbnailUpdated,
+        });
+
+        res.json({
+            success: true,
+            provider: 'fc2',
+            videoId: video.id,
+            metadata: meta,
+            performerCount: performerRefs.length,
+            thumbnailUpdated,
+        });
+    } catch (err) {
+        addRuntimeLog('error', 'scraper', 'FC2 apply failed', {
+            error: String(err?.message || err || ''),
+        });
+        res.status(500).json({ error: err?.message || 'FC2 apply failed' });
+    }
+});
+
+app.post('/api/scraper/javpop/search', async (req, res) => {
+    try {
+        const query = String(req.body?.query || '').trim();
+        const urlInput = String(req.body?.url || '').trim();
+        if (!query && !urlInput) {
+            return res.status(400).json({ error: 'Missing query or url' });
+        }
+
+        addRuntimeLog('info', 'scraper', 'JAVPop search requested', {
+            queryLength: query.length,
+            hasUrl: !!urlInput,
+        });
+
+        // Direct URL mode
+        if (urlInput) {
+            const parsed = scrapers.parseJavpopUrl(urlInput);
+            if (!parsed) {
+                return res.status(400).json({ error: 'Invalid JAVPop URL' });
+            }
+            const detail = await scrapers.scrapeJavpopContent(urlInput);
+            if (!detail || !detail.title) {
+                return res.status(404).json({ error: 'JAVPop content not found' });
+            }
+            const normalized = scrapers.normalizeJavpopResult(detail);
+            addRuntimeLog('info', 'scraper', 'JAVPop content scraped by URL', {
+                title: String(normalized?.title || ''),
+            });
+            return res.json({ success: true, mode: 'url', provider: 'javpop', results: [normalized] });
+        }
+
+        // Search mode
+        const searchResults = await scrapers.searchJavpop(query);
+        const normalized = searchResults.map(r => ({
+            ...scrapers.normalizeJavpopResult(r),
+            title: r.title || '',
+            thumbUrl: r.thumbUrl || '',
+            date: r.date || '',
+        }));
+
+        addRuntimeLog('info', 'scraper', 'JAVPop search completed', {
+            query,
+            resultCount: normalized.length,
+        });
+
+        res.json({ success: true, mode: 'search', provider: 'javpop', results: normalized });
+    } catch (err) {
+        addRuntimeLog('error', 'scraper', 'JAVPop search failed', {
+            error: String(err?.message || err || ''),
+        });
+        res.status(500).json({ error: err?.message || 'JAVPop search failed' });
+    }
+});
+
+app.post('/api/scraper/javpop/apply', async (req, res) => {
+    try {
+        const videoId = String(req.body?.videoId || '').trim();
+        const urlInput = String(req.body?.url || '').trim();
+        const video = videoIndex[videoId];
+        if (!video?.filePath) {
+            return res.status(404).json({ error: 'Video not found' });
+        }
+
+        addRuntimeLog('info', 'scraper', 'JAVPop apply requested', {
+            videoId,
+            hasUrl: !!urlInput,
+        });
+
+        if (!urlInput) {
+            return res.status(400).json({ error: 'Missing URL for JAVPop apply' });
+        }
+
+        const detail = await scrapers.scrapeJavpopContent(urlInput);
+        if (!detail || !detail.title) {
+            return res.status(404).json({ error: 'JAVPop content not found' });
+        }
+
+        const normalized = scrapers.normalizeJavpopResult(detail);
+
+        const meta = setTpdbVideoMetadata(video.filePath, {
+            itemType: 'jav',
+            itemId: normalized.id || '',
+            sourceUrl: normalized.sourceUrl || '',
+            title: normalized.title || video.title || '',
+            description: normalized.description || '',
+            releaseDate: normalized.date || '',
+            siteName: normalized.siteName || 'JAVPop',
+            posterUrl: normalized.posterUrl || '',
+            thumbUrl: normalized.thumbUrl || '',
+            raw: { ...normalized.raw, _glyphProvider: 'javpop' },
+        });
+
+        const performerRefs = [];
+        for (const perf of (normalized.performers || [])) {
+            const perfName = typeof perf === 'string' ? perf : perf?.name;
+            if (perfName) {
+                const saved = setTpdbPerformer({
+                    id: `name:${perfName.toLowerCase()}`,
+                    name: perfName,
+                });
+                if (saved?.id) performerRefs.push(saved);
+            }
+        }
+        setTpdbVideoPerformers(video.filePath, performerRefs);
+
+        // Download thumbnail
+        const thumbPath = getTpdbThumbPath(video.filePath);
+        const thumbCandidate = normalized.thumbUrl || normalized.posterUrl || '';
+        let thumbnailUpdated = false;
+        if (thumbCandidate) {
+            try {
+                if (fs.existsSync(thumbPath)) fs.rmSync(thumbPath, { force: true });
+                await downloadImageToFile(thumbCandidate, thumbPath);
+                thumbnailUpdated = hasValidThumbFile(thumbPath);
+                if (thumbnailUpdated) {
+                    writeThumbSource(thumbPath, `javpop:${thumbCandidate}`);
+                }
+            } catch (err) {
+                addRuntimeLog('warn', 'scraper', 'JAVPop thumbnail download failed', {
+                    error: String(err?.message || ''),
+                });
+            }
+        }
+
+        syncTpdbVideoMetaIntoCaches(video.filePath);
+        refreshVrMetaForPath(video.filePath);
+
+        addRuntimeLog('info', 'scraper', 'JAVPop apply completed', {
+            videoId,
+            title: String(normalized?.title || ''),
+            thumbnailUpdated,
+        });
+
+        res.json({
+            success: true,
+            provider: 'javpop',
+            videoId: video.id,
+            metadata: meta,
+            performerCount: performerRefs.length,
+            thumbnailUpdated,
+        });
+    } catch (err) {
+        addRuntimeLog('error', 'scraper', 'JAVPop apply failed', {
+            error: String(err?.message || err || ''),
+        });
+        res.status(500).json({ error: err?.message || 'JAVPop apply failed' });
+    }
+});
+
+app.post('/api/scraper/browser/close', async (req, res) => {
+    try {
+        await scrapers.closeBrowser();
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err?.message || 'Failed to close browser' });
     }
 });
 

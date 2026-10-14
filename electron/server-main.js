@@ -1,4 +1,4 @@
-﻿const { app, Tray, Menu, nativeImage, dialog, shell, BrowserWindow } = require('electron');
+const { app, Tray, Menu, nativeImage, dialog, shell, BrowserWindow } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');

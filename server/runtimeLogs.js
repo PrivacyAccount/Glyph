@@ -1,4 +1,4 @@
-﻿function createRuntimeLogger(limit = 800) {
+function createRuntimeLogger(limit = 800) {
     const max = Math.max(100, Number(limit) || 800);
     const entries = [];
     let nextId = 1;

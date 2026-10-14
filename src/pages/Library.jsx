@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react';
 import Sidebar from '../components/Sidebar';
 import PropertiesDialog from '../components/PropertiesDialog';
 import VideoCard from '../components/VideoCard';
@@ -6,6 +6,7 @@ import ContextMenu from '../components/ContextMenu';
 import TMDBDialog from '../components/TMDBDialog';
 import BatchTMDBDialog from '../components/BatchTMDBDialog';
 import TPDBDialog from '../components/TPDBDialog';
+import ScraperDialog from '../components/ScraperDialog';
 import RenameDialog from '../components/RenameDialog';
 import FileBrowser from '../components/FileBrowser';
 import TagDialog from '../components/TagDialog';
@@ -2591,7 +2592,7 @@ function Library({ library, onLibraryUpdate, onBack, onPlay, onSeriesSelect, onO
                 </div>
             )}
             {tpdbDialogVideo && (
-                <TPDBDialog
+                <ScraperDialog
                     video={tpdbDialogVideo}
                     onClose={() => setTpdbDialogVideo(null)}
                     onApplied={handleTpdbApplied}

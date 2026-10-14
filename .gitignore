@@ -24,3 +24,4 @@ Thumbs.db
 # Local bundled MPV binaries (CI creates these at build time)
 vendor/mpv/mpv.exe
 vendor/mpv/mpv
+.env

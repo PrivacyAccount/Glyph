@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import FunscriptHeatmap from '../components/FunscriptHeatmap';
 import PropertiesDialog from '../components/PropertiesDialog';
 import ContextMenu from '../components/ContextMenu';
